@@ -66,6 +66,11 @@ boxcox <- function(data, lambda) {
   return(data.boxcox)
 }
 
+# Normalization - Find Lambda
+boxcox_lambda <- function(data){
+  return((BoxCox.ar(data)$ci[1] + BoxCox.ar(data)$ci[2])/2)
+}
+
 # Reverse Boxcox
 reverse.boxcox <- function(data, lambda) {
   data.inv <- (lambda * data + 1) ^(1/lambda)
