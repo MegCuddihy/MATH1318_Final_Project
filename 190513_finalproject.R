@@ -24,8 +24,11 @@ library(lmtest)
 # Sam's working directory
 # setwd("")
 
+
+
 #### FUNCTIONS ---------
 source("functions.R")
+
 
 
 ### IMPORT DATA ---------
@@ -34,10 +37,18 @@ bitcoin <- read.csv(url)
 bitcoin.ts <- ts(bitcoin$Close, start=c(2013,04,27), end = c(2019,02,24), frequency = 365)
 
 
+
 #### MODEL SPECIFICATION ---------
 fig_num = 1
 plot(bitcoin.ts, type='o', main=paste0("Figure ",fig_num,": A timeseries plot of BitCoin value"), xlab="Year", ylab="$", cex.main=0.8)
 fig_num = fig_num + 1
+
+# Testing Autocorrelation
+fig_num <- ms.autocorrelation(bitcoin.ts,1,"Autocorrelation of BitCoin series","","",fig_num)
+
+# Testing Seasonality/ Cyclicity
+fig_num <- ms.seasonality(bitcoin.ts, "Seasonality ", "Year", "", 5, 15,fig_num)
+
 
 
 #### CHECKING STATIONARY  ---------
@@ -66,6 +77,7 @@ fig_num <- test_diff(bitcoin.ts.bc.diff, "", fig_num)
 
 # Testing normality in the series
 fig_num <- ts_normality_test(bitcoin.ts.bc.diff,"",fig_num)
+
 
 
 #### MODEL FITTING  --------
