@@ -65,7 +65,7 @@ bitcoin.ts.bc.diff <- diff(bitcoin.ts.bc, difference = 1)
 fig_num <- test_diff(bitcoin.ts.bc.diff, "", fig_num)
 
 # Testing normality in the series
-fig_num <- ts_normality_test(bitcoin.ts.bc.diff,"transformed egg deposition series",fig_num)
+fig_num <- ts_normality_test(bitcoin.ts.bc.diff,"",fig_num)
 
 
 #### MODEL FITTING  --------
