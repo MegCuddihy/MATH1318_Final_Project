@@ -1,0 +1,1078 @@
+---
+title: "MATH1318 Final Project: Bitcoin Time Series"
+author: "Margaret Cuddihy (s3608125),	Elleni Toumpas (s3708633) and	Samuel Holt (s3381728)"
+
+date: "29 April 2019"
+output:
+      pdf_document:
+      toc: true
+      toc_depth: 3
+    
+    
+---
+
+\centering
+\raggedright
+\newpage
+\tableofcontents
+\newpage
+
+
+# Introduction
+
+Bitcoin is a form of electronic cash and is popular for being the first cryptocurrency. It was invented in 2009 and is a decentralized digital currency with transactions recorded by ‘miners’, a process completed through the use of computer processing power. Bitcoin, and cryptocurrency as a whole, is criticised for many factors, its high volatility being one of them. Bitcoin experiences many cycles bubbles and busts, and to be able forecast these trends could help in making decisions before investing or selling bitcoin. Taking into account the daily closing price of bitcoin from the 27th of April 2013 to the 24th of February 2019, sourced from coinmarketcap.com we can build a timeseries model and forecast the next 10 days with high accuracy.
+
+## Outline of Project
+
+The aim of this project is to use the statistical analysis methods covered in MATH1318: Time Series Analysis in order to fit an appropriate model to the Bitcoin time series which will allow us to create a 10 day forecast. The true values of the next 10 days in the series are known, so the predictive ability of the model will be assessed using the Mean Absolute Scaled Error (MASE) method. 
+
+Firstly, we will import and preprocess the data so it can be converted into a time series object. We will then plot the series and provide an initial inspection of the behaviour of the series. We will also calculate the autocorrelation of the series and examine the Autocorrelation Function (ACF), Partial Autocorrelation Function (PACF) and first lag scatter plot. From this initial inspection, we will highlight key aspects of the series and explain how these will guide our modelling strategy. 
+
+In the next section, we will apply an appropriate transformation and take the first difference of the series in order to achieve stationarity. We will then model the mean trend of the series through ARIMA modelling, using the ACF, PACF, Extended Autocorrelation Function (EACF) and the Bayesian Information Critereon (BIC) Table to identfy potential orders. The potential models will be fitted and subjected to statistical testing, whereupon the significance of the coefficients and the behaviour of the model residuals will be assessed. Additionaly, we will use Akaike Information Crieteron (AIC) and BIC scores in order to rank the potential. These methods will be used to select and justify the most appropriate chocie. 
+
+We suspect this series has changing variance. This assumption will be tested and verified using statistical tests and a GARCH component will be added to our model. The GARCH orders will be estimated using the transformed residuals of the ARIMA series. THe potential GARCH models will be fitted and the residuals will be inspected. Again, we will use AIC to rank the potential models and select the GARCH model with the lowest score. 
+
+Once the ARIMA and GARCH components of our final model have been fitted to the data, we will estimate the 10 day forecast of Bitcoin cloising prices. Because we will have transformed and differenced the time series, our forecast will be reverse-transformed and fitted to the original series. We will then assess the accuracy of our prediction using the MASE method.
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages
+```{r message=FALSE, warning=FALSE}
+library(stringr)
+library(TSA)
+library(fUnitRoots)
+library(lmtest)
+library(tseries)
+library(mvtnorm)
+library(rugarch)
+```
+
+```{r Appendix, include=FALSE}
+
+acf.pacf.f <- function(x, title1, title2)
+            {par(mfrow = c(1,2))
+              acf(x, main = title1)
+              pacf(x, main = title2)
+              par(mfrow = c(1,1))}
+
+plot.compare.f <- function(x1, x2, title1, title2)
+                  {par(mfrow=c(2,1))
+                  plot(x1, type = "l", main = title1)
+                  plot(x2, type = "l", main = title2)
+                  par(mfrow=c(1,1))}
+
+norm.f <- function(model, titlehist, titleqq)
+         {par(mfrow=c(1,2))
+            hist(model, main = titlehist)
+            qqnorm(model, main = titleqq)
+            qqline(model, col = 2, lwd = 1, lty = 2)
+            print(shapiro.test(model))
+            par(mfrow=c(1,1))}
+
+
+
+p.q.orders <- function(x, titleA, titleP, ar.max, ma.max, nar, nma)
+              {acf.pacf.f(x, titleA, titleP)
+              eacf(x, ar.max = ar.max, ma.max = ma.max)
+              res = armasubsets(y = x, nar = nar, nma = nma, ar.method = 'yule-walker')
+              plot(res)}
+
+arima.test <- function(model)
+            {res <- rstandard(model)
+            par(mfrow = c(2,2))
+            plot(res, type = 'o', ylab = 'Standardised residuals', main = "Time series plot of standardised residuals")
+            abline(h = 0)
+            norm.f(res, "Histogram", "QQ Plot")
+            acf(res, main = "ACF of the Standardised Resiudals")
+            par(mfrow = c(1,1))
+            tsdiag(model, gof = 15, omit.initial = F)}
+
+myCandidate <- function(timeSeries, orderList,
+                        methodType = c("CSS-ML", "ML", "CSS")[1],
+                        fixedList = NULL, icSortBy = c("AIC", "AICc","BIC")[1],
+                        ...){
+  
+  # timeSeries = the time series (a ts object)
+  # orderList = a list object of c(p, d, q)
+  # methodType = estimation method; default = "CSS-ML"
+  # fixedList = a list object of free/fixed coefficient
+  # icSortBy = information criterion (IC) to be used to sort the IC table
+  #         : default value: by AIC
+  # ... Additional arguments to be passed to Arima
+  myCandidateEst <- list()
+  n <- length(orderList)
+  for(i in 1:n){
+    order <- sapply(orderList,function(x) unlist(x))[,i]
+    myCandidateEst[[i]] <- Arima(y = timeSeries, order = order, method = methodType)
+  }
+  significanceTest <- list()               # a list for significance tests
+  ICTable <- matrix(NA, nrow = n, ncol = 6) # create a matrix to store IC
+  for(i in 1:n){
+    for(j in 1:3){
+      ICTable[i,j] <- orderList[[i]][j]       # return the ARIMA orders
+    }
+      ICTable[i,4] <- myCandidateEst[[i]]$aic # 
+      ICTable[i,5] <- myCandidateEst[[i]]$aicc
+      ICTable[i,6] <- myCandidateEst[[i]]$bic
+      
+      significanceTest[[i]]<- coeftest(myCandidateEst[[i]])
+  }
+  
+  ICTable <- data.frame(ICTable)
+  names(ICTable) <- c('p', 'd', 'q', 'AIC', 'AICc', 'BIC')
+  
+  if(icSortBy == "AIC"){
+    ICTable <- ICTable[order(ICTable$AIC),] # sort the table by AIC
+  }else if(icSortBy == "AICc"){
+    ICTable <- ICTable[order(ICTable$AICc),] # sort the table by AICc
+  }else if(icSortBy == "BIC"){
+    ICTable <- ICTable[order(ICTable$BIC),]
+  }else{
+    stop("Incorrect Information Criterion")
+  }
+  
+  
+  myCandidateEst <- list(model = myCandidateEst, IC = ICTable,
+                         significanceTest = significanceTest,
+                         orderList = orderList)
+  return(myCandidateEst)
+}
+
+openGraph = function( width=7 , height=7 , mag=1.0 , ... ) {
+  if ( .Platform$OS.type != "windows" ) { # Mac OS, Linux
+    tryInfo = try( X11( width=width*mag , height=height*mag , type="cairo" , 
+                        ... ) )
+    if ( class(tryInfo)=="try-error" ) {
+      lineInput = readline("WARNING: Previous graphics windows will be closed because of too many open windows.\nTO CONTINUE, PRESS <ENTER> IN R CONSOLE.\n")
+      graphics.off() 
+      X11( width=width*mag , height=height*mag , type="cairo" , ... )
+    }
+  } else { # Windows OS
+    tryInfo = try( windows( width=width*mag , height=height*mag , ... ) )
+    if ( class(tryInfo)=="try-error" ) {
+      lineInput = readline("WARNING: Previous graphics windows will be closed because of too many open windows.\nTO CONTINUE, PRESS <ENTER> IN R CONSOLE.\n")
+      graphics.off() 
+      windows( width=width*mag , height=height*mag , ... )    
+    }
+  }
+}
+
+ARIMAdiagnostic <- function(model, lagNumber, 
+                            openPlot = c(TRUE, FALSE)[2]){
+  
+  e <- residuals(model)   # residuals
+  er <- rstandard(model)   # standardized residuals
+  if(openPlot == TRUE){
+    openGraph(width=7 , height=7 , mag=1.0)
+    par(mfrow = c(3,2))
+  }
+  
+  # QQ Plot
+  qqnorm(er, main = "", ylab = "QQ of Residuals")
+  qqline(er, col = "red")
+  
+  # Standardised residual plot
+  
+  plot(e, type = "n", main = "", ylab = "Standardized Residuals")
+  abline(h=c(-3,0,3),col = c("red","black", "red"), lty = c("dotted", "solid", "dotted"))
+  points(e, pch = 1, cex = 0.5)
+  
+  # ACF/PACF Graphs
+  
+  Acf(e, main = "", lag.max = lagNumber)
+  Pacf(e, main = "", lag.max =lagNumber)
+  
+  # Histogram
+  
+  hist(er, breaks = "FD", freq  = FALSE, col = "gray", border = "white",
+       main = "", ylab = "Density Function", xlab = "Standardized Residuals")
+  x <- seq(min(er),max(er), by = 0.001)  # add the theoretical z-distribution
+  lines(x, dnorm(x), col = "red")
+  legend("topleft", legend = c("Sample","Theoretical"), col = c("gray", "red"),
+         pch = 15, bty = "n")
+  
+  # P-Value for Ljung-Box
+  
+  pValue <- rep(0, lagNumber)
+  for(j in 0:lagNumber){
+    pValue[j] <- Box.test(e, lag = j, type = "Ljung-Box", fitdf = 0)$p.value
+  }
+  plot(pValue, ylim = c(0,1), type = "n", ylab = "P-values",
+       xlab = "Lags")
+  points(pValue)
+  abline(h = 0.05, col = "red", lty = "dotted")
+  
+  par(mfrow = c(1,1))
+  
+}
+
+
+parameter.diagnostic <- function(data,method,p,d,q,title,fig_num){
+  
+  # which model is this parameter estimation, hypothesis test and diagnostic test for?
+  print(paste0("model.",as.character(p),as.character(d),as.character(q)))
+  
+  # create the model
+  if ('mle' %in% method){
+    model.mle <- arima(data,order=c(p,d,q),method='ML')
+    print('Hypothesis test for Maximum Likelihood Estimate method of coefficient estimation')
+    print(coeftest(model.mle))
+  }
+  
+  if ('lse' %in% method){
+    model.lse <- arima(data,order=c(p,d,q),method='CSS')
+    print('Hypothesis test for Least Squares Estimate method of coefficient estimation')
+    print(coeftest(model.lse))
+  }
+  
+  # prepare grid for plot
+  par(mfrow=c(3,2))
+  
+  # plot of standardised residuals
+  plot(rstandard(model.mle), ylab="Standardised Residuals", type="o", main=paste0("Figure ",fig_num,"A: Time Series Plot of standardised residuals for\n",title), cex.main=0.8)
+  abline(h=0)
+  
+  # save the residuals to an object
+  e <- residuals(model.mle)
+  
+  # Test normalcy by plotting the qq plot
+  qqnorm(e, main=paste0("Figure ",fig_num,"B: Normal Q-Q Plot for residuals of\n",title), cex.main=0.8)
+  qqline(e)
+  
+  # Test normalcy by histogram
+  hist(e, xlab = 'Standardized Residuals', main=paste0("Figure ",fig_num,"C: Histogram of residuals"), cex.main=0.8)
+  
+  # Perform ACF/ PACF on the residual of the models
+  acf(residuals(model.mle), main=paste0("Figure ",fig_num,"D: ACF of the residuals of the model") , cex.main=0.8)
+
+  # Plot Box-Ljung test
+  tsdiag(model.mle, gof=15, omit.initial=F)
+  
+  # progress fig_num
+  fig_num = fig_num + 1
+  
+  # Execute a Box-Ljung test
+  print(Box.test(residuals(model.mle), lag=6, type="Ljung-Box",fitdf=0))
+  
+  
+  # Test normalcy with the shapiro test
+  print(shapiro.test(e))
+  
+  
+  return(model.mle)
+}
+
+# Elleni's function
+
+sort.score <- function(x, score = c("bic", "aic")){
+  if (score == "aic"){
+    x[with(x, order(AIC)),]
+  } else if (score == "bic") {
+    x[with(x, order(BIC)),]
+  } else {
+    warning('score = "x" only accepts valid arguments ("aic","bic")')
+  }
+}
+              #Obtained from the MATH1318 Canvas page for Module 7
+
+
+```
+
+# 1. Preprocessing 
+
+Upon inspection of the data, we noticed two things that needed to be addressed. Firstly, the data contains two columns, the first column including dates for each observation. As we planned to convert the data into a time series object, the first column was superfluous and was therefore dropped. Secondly, we found that a few of the daily closing price values were over 1,000 and were recorded with commas. This resulted in NAs when we initially converted the data to a time series object. To prevent this, we simply removed the commas from the data. The time series begins on 27/04/2013 and was given a frequency of 365 as this is a daily series.
+
+## Import Data
+```{r}
+setwd("C:/Users/marga/OneDrive/Documents/Uni/Time Series Analysis/Final Project")
+bitcoin <- read.csv("Bitcoin_Historical_Price.csv", header = TRUE, stringsAsFactors = FALSE)
+```
+
+## Inspect the Data
+```{r}
+dim(bitcoin)
+head(bitcoin)
+
+#Only need second column 
+
+bitcoin <- bitcoin[,2]
+
+```
+
+## Convert to Time Series Object
+```{r}
+
+bitcoin <- as.numeric(gsub(",", "", bitcoin)) #Remove commas for thousands and convert to numeric 
+
+which(is.na(bitcoin)) #Check no missing values - none found
+
+bitcoin.ts <- ts(bitcoin, start = c(2013, 4, 27), frequency = 365 )
+
+```
+
+# 2. Intial Inspection of Bitcoin Historical Prices Series
+
+Here we plot and inspect the time series in order to gain an initial understanding of its behaviour. 
+
+## Plot Time Series
+
+```{r}
+par(mfrow = c(1,1))
+plot(bitcoin.ts, ylab = "Daily Closing Price of Bitcoin (USD)", main = "Figure 1: Bitcoin Historical Prices (2013-2019)")
+```
+
+### Visual Inspection of the Bit Coin Time Series (Figure 1):
+
+1. Trend: There is a exponential increase in the trend until mid-2017 and then it steadily declines for the rest of the series. This will be confirmed using an Augmented Dickey-Fuller Test of stationarity. 
+
+2. Seasonality: There are no seasonally repeating patterns evident in the data. If we miss any seasonal behaviour in the initial inspection, it will be apparently in the ACF and PACF plots. 
+
+3. Changing Variance: Changing variance is very clear. Initially, variance in the data is small until 2017 and then it dramatically increases. It appears to become small again at the very end of the series. We know financial data is sensitive to shocks so this is expected. Research was conducted to identify the potential causes of these shocks, which included tightening regulation on Bitcoin trading. 
+
+4. Intervention Point: Through the research conducted on the exogenous events impacting the series, we identified a number of potential intervention points, such as ______ . However, we deemed that none of the shocks were so great as to completely disrupt the behaviour of the series. 
+
+5. Autocorrelation Behaviour: Both autocorrelation and moving average behaviour seem apparent. For autocorrelation behaviour, we can see instances where consecutive observations closely follow each other. For moving average, there are also instances where the data seems to sharply fluctuate. Overall, the behaviour is difficult to see because of the changing variance. 
+
+## Check Autocorrelation between t and t-1
+
+Firstly, we will confirm there is autocorrelation in the series. If there is no significant autocorrelation, it may be sufficient to fit the series using a simple deterministic model. However, given this a financial data time series, this is unlikely to be the case. 
+
+#### Scatter plot of current time point values and their first lag
+
+```{r echo=TRUE}
+plot(y = bitcoin.ts, x =zlag(bitcoin.ts), ylab='Bitcoin Closing Price (Yt)', xlab='Bitcoin Closing Price (Yt-1)', main = "Figure 2: Scatter plot of current egg depositions \nand the previous lag")
+abline(0,1, col = "red")
+```
+
+#### Visual Inspection of Figure 2:
+
+1. As expected, the scatter plot shows there is a clear positive relationship between current time point values and the value of the previous lag.
+
+2. The scatter plot also supports our assumption that there is changing variance in the series. The smaller values of the series are very tightly configured around the 45 degree line, while larger values are more spread. 
+
+
+#### Calculate the correlation coefficient between current time point values and their first lag
+
+```{r echo=TRUE}
+y = bitcoin.ts               
+x = zlag(bitcoin.ts)         
+index = 2:length(x)    
+cor(y[index],x[index])
+```
+
+#### Correlation Finding: 
+
+The correlation coefficient calculated is 0.998, indicating extremely strong positive correlation between the current time point value and its first lag. 
+
+Because of the strong autocorrelation, a simple deterministic trend model will not be a suitable fit for this series, as it will be inadequate in capturing the autocorrelation structure. Therefore, we must proceed with an ARIMA model. Further, the initial plot of the time series (Figure 1) and scatter plot of first lags (Figure 2) indicate there is an issue of changing variance so it is likely we will need to include a GARCH component to the final model as well. 
+
+### ACF and PACF of the Time Series
+
+We have established there is autocorrelation in the data. The Autocorrelation Function (ACF) and the Partial Autocorrelation Function (PACF) of the series will provide further insight into the particular behaviour of this autocorrelation. 
+
+```{r}
+acf.pacf.f(bitcoin.ts, 
+           "Figure 3a: ACF of Bitcoin \n Historical Prices", 
+            "Figure 3b: PACF of Bitcoin \n Historical Prices")
+```
+
+#### Inspection of ACF (Figure 3a) and PACF (Figure 3b) of the Bitcoin Historical Prices Time Series:
+
+The ACF in Figure 3a shows a large number of highly significantly lags, exhibiting a slowly decaying pattern. The PACF in Figure 3b shows one highly signficant lag at the first lag. These patterns displayed in these plots strongly suggest there is non-stationarity in the data. Not-stationarity is likely to be the cause of the changing trend behaviour identified in the initial inspection of the time series plot (Figure 1). This must be addressed before the data can be modelled.
+
+
+# 2. Transformation and Differencing
+
+Before fitting the model, any non-stationarity in the series must be removed. To do this, we will use the Box-Cox method to first transform the data and attempt to stablise the variance. We will then test for stationarity using the Augmented Dickey-Fuller (ADF) Unit-Root Test. Once we have confirmed non-stationarity in the transformed data, we will take the difference of the time series and repeat the ADF test until non-stationarity is achieved. The transformed and differenced data is what we will use in our ARIMA modelling, with the d order equivalent to the number of differences required to achieve stationarity. 
+
+## Apply a Box-Cox Transformation 
+
+All values of the series are above 0 so we can directly proceed with a Box-Cox Transformation. First we will identify the optimal transformation parameter lambda.
+ 
+```{r}
+bitcoin.bc <- BoxCox.ar(bitcoin.ts, 
+                        method = 'yule-walker')
+
+bitcoin.bc$ci
+
+```
+
+The optimal lambda is 0, indicating a log transformation on the bitcoin time series is most appropriate. 
+
+```{r}
+
+bitcoin.log <- log(bitcoin.ts)
+
+plot.compare.f(bitcoin.ts, bitcoin.log, "Figure 4a: Original Bitcoin \n Historical Prices (2013-2019)", "Figure 4b: Log-Transformed Bitcoin \n Historical Prices (2013-2019)" )
+
+```
+
+### Visual Inspection of the Log Transformed Series Plot
+
+The log transformation of the series has removed some of the drastic change in variance that occurs around 2017, though there is still some  volatility clustering apparent. The plot in Figure 4b now clearly shows an upward trend apparent in the data, further supporting our expectation of non-stationarity in the data.
+
+### Check whether the log transformation has improved the normality of the series.
+
+```{r}
+
+norm.f(bitcoin.ts, "Figure 5a: Historgram of \n Log Bitcoin Prices", "Figure 5b: QQ Plot of \n Log Bitcoin Prices")
+
+norm.f(bitcoin.log, "Figure 5c: Historgram of \n Log Bitcoin Prices", "Figure 5d: QQ Plot of \n Log Bitcoin Prices")
+
+```
+
+### Result of Normality Tests for Log-Transformed Series
+
+The normality of the distribution has considerably improved. The histogram of the transformed data (Figure 5c) is far less postiviely skewed than the original data (Figure 5a) so there has been some improvement to the distribution. The QQ Plot (Figure 5c) shows that the data now more closely resembles the red reference line of normality, though there is still signficant deviation, particularly around the tails. The thickness of the tails in the QQ Plot is an indication of changing variance. Further, the Shapiro-Wilk test result supports that the data is not normally distributed, even after the log transformation.
+
+### ACF and PACF of the Log-Transformed Series
+
+```{r}
+acf.pacf.f(log(bitcoin.ts), "Figure 6a: ACF of \n Log Bitcoin Prices", "Figure 6b: PACF of \n Log Bitcoin Prices")
+```
+
+### Visual Inspection of the Log Transformed Series ACF and PACF
+
+Although the distribution of the data was somewhat improved by the log transformation, the ACF (Figure 6a) and PACF (Figure 6b) of the log-transformed series still strongly indicate that the series is non-stationary. An upward trend was also obvious in the plot of the transformed data (Figure 5a) This will be confirmed using a unit-root test. If confirmed, differencing of the series will be used to render the series stationary. 
+
+## Augmented Dickey-Fuller Unit-Root Test of Trend Stationarity
+
+The null hypothesis of the test is that the data is trend non-stationary; that is, the data is not stationary but can be rendered so through differencing. The alternative hypothesis is that the data is stationary. We will use the significance level of 95%, so a p-value less than 0.05 will result in a rejection of the null hypothesis. 
+
+```{r}
+ar(diff(bitcoin.log)) #Order of lags select = 31
+
+adfTest(bitcoin.log, lags = 31, type = "nc", title = NULL,description = NULL)
+
+```
+
+### Results of the ADF Test
+
+The p-value of the ADF unit-root test is much higher than 0.05, leading the the failure to reject the null hypothesis of trend non-stationarity. We can proceed with differencing the series to remove the trend. 
+
+## First Differencing 
+
+```{r}
+bitcoin.r <- diff(bitcoin.log)*100  #Multiplying by 100 gives the percentage change of prices 
+
+plot.compare.f(bitcoin.log, bitcoin.r, "Figure 7a: Log-Transformed Bitcoin \n Historical Prices (2013-2019)", "Figure 7b: First Difference of \n Log-Transformed Bitcoin \n Historical Prices (2013-2019)")
+```
+
+### Results of First Differencing - Plot Inspection
+
+Taking the first difference of the log-transformed Bitcoin Historical Prices series has appeared to largely remove the positive trend from the series. Now the data appears to fluctuate around a mean of zero. The volatility clustering is clearly evident, with large variance clusters occuring around midway through 2013 and 2017 in particular. This indicates that a GARCH component may need to be included in our final model as forecasting will need to take into account conditional variance. 
+
+## Augmented Dickey-Fuller Unit-Root Test of Trend Stationarity for the First Difference
+
+Stationarity will be confirmed with an ADF unit-root test applied to the first difference of the log-transformed series. 
+
+```{r}
+ar(diff(bitcoin.r)) #Order of lags select = 32
+
+adfTest(bitcoin.r, lags = 32, type = "nc", title = NULL,description = NULL)
+
+```
+
+The p-value of the ADF test when applied to the first difference of the log-transformed series is less than 0.01. This is statistically signficant enough to reject the null hypothesis and conclude that the series has be rendered stationary. 
+
+This combination of taking the log-transformation and first difference of the series is also commonly referred to as the returns of the series. The returns indicate the percentage movement of prices for each day (hence, the object bitcoin.r was multiplied by 100). We will proceed with determining the ARIMA orders of the Bitcoin Historical Prices series using the returns.
+
+# 3. Determining the Potential Orders of an ARIMA Model
+
+An ARIMA(p,d,q) model will be fitted and used to predict future mean levels of Bitcoin prices. In Section 2 of the report, it was determined that the differencing order will be 1 as taking the first difference successfully rendered the time series stationary (d = 1). The potential orders of p and q will be estimated using the ACF, PACF, Extended ACF (EACF) and Bayes Information Critereon (BIC) Table of the returns series of Bitcoin Historical Prices. 
+
+`
+```{r}
+p.q.orders(bitcoin.r, "Figure 8a: ACF of \n  Returns", "Figure 8b: PACF of \n Returns", 10, 10, 13, 12)
+
+```
+
+
+### ACF and PACF Estimated Orders of p and q
+
+Taking the first difference of the Bitcoin prices series has removed the slow decaying pattern of highly signficant lags in the ACF (Figure 8a). The ACF and PACF (Figure 8b) show a number of signficant lags, but due to the changing variance in the series, the interpretation of the likely orders of p and q is not clear. For the ACF, there are definitely 2 signficant lags, possibly 4 or even 6 that could be considered candidate values for q. Similarly in the PACF, there are definitely two signficant lags towards the start and possibly 4 or 6 signficant lags. The changing variance is also likely to be the cause of higher order lags further back in the series which are less clearly significant. 
+
+Possible ARIMA models: {ARIMA(2,1,2), ARIMA(2,1,4), ARIMA(2,1,6), ARIMA(4,1,2), ARIMA(4,1,4), ARIMA(4,1,6), ARIMA(6,1,2), ARIMA(6,1,4), ARIMA(6,1,6)}
+
+### EACF Estimated Orders of p and q
+
+On initial inspection of the EACF plot, it appears the highest left vertex is at (0,0) indicating that the returns series is a white noise series, but because there has been evidence of changing variance in the series, it is likely that the EACF output is "fuzzy"; that is, the location of the vertex is not clear. Another possible vertex point exists at (5,5), (6,5), (5,6) and (6,6) so we will take these as possible orders. 
+
+Possible ARIMA models: {ARIMA(5,1,5), ARIMA(5,1,6), ARIMA(6,1,5), ARIMA(6,1,6)}
+
+### BIC Table Estimated Orders of p and q
+
+The BIC table indicates the models with the low BIC values tend to have AR orders of 6 and 11 and MA order of 11.  The BIC Table tends to yield quite high orders, but since the series has over 2000 observations these orders are not unreasonable.  
+
+Possible ARIMA models: {ARIMA(6,1,0), ARIMA(6,1,11), ARIMA(11,1,11)}
+
+
+# 4. Testing Potential ARIMA Models
+
+The final set of models to be tested is:
+
+{ARIMA(2,1,2), ARIMA(2,1,4), ARIMA(2,1,6), ARIMA(4,1,2), ARIMA(4,1,4), ARIMA(4,1,6), ARIMA(5,1,5), ARIMA(5,1,6), ARIMA(6,1,0), ARIMA(6,1,2), ARIMA(6,1,4), ARIMA (6,1,5) ARIMA(6,1,6), ARIMA(6,1,11), ARIMA(11,1,11)}
+
+The methodology for chosing the best ARIMA model will firstly involve fitting each set of ARIMA orders to the data using the Maximum Likelihood Estimation (MLE) method and inspecting the coefficients generated by the model to see if they are shown to be statistically significant. Models with all or most coefficients significant will be prioritised. We will also inspect the residuals of each model by inspecting the plot of the standardised residuals, the ACF of the standardised residuals and by calculating the p-values for the Ljung-Box statstic at each lag. In the ACF of the residuals, we will be looking to see if the model has sufficiently captured the autocorrelation of the series, leaving only white noise. Models generating ACFs with no significant lags will be prioritised. For the Ljung-Box test, the null hypothesis is that there is no autocorrelation left in any part of the residuals. Therefore we will be looking for p-values greater than the significance threshold of 0.05 to indicate that the model has suffcienctly captured autocorrelation. Models will p-values higher than 0.05 at all lags will be prioritised. 
+
+```{r eval=FALSE, include=FALSE}
+
+model.list <- list(c(2,1,2), 
+                  c(2,1,4), 
+                  c(2,1,6), 
+                  c(4,1,2),
+                  c(4,1,4),
+                  c(4,1,6),
+                  c(5,1,5),
+                  c(5,1,6),
+                  c(6,1,0),
+                  c(6,1,2),
+                  c(6,1,4),
+                  c(6,1,5),
+                  c(6,1,6),
+                  c(6,1,11),
+                  c(11,1,11)
+                  )
+
+modelEstimation <- myCandidate(bitcoin.r, orderList = model.list, methodType = "ML")
+
+modelEstimation
+
+modelEstimation$IC
+
+residual.analysis(modelEstimation$model[[1]])
+residual.analysis(modelEstimation$model[[2]])
+residual.analysis(modelEstimation$model[[3]])
+residual.analysis(modelEstimation$model[[4]])
+residual.analysis(modelEstimation$model[[5]])
+residual.analysis(modelEstimation$model[[6]])
+residual.analysis(modelEstimation$model[[7]])
+residual.analysis(modelEstimation$model[[8]]) #residuals uncorrelated (5,1,6)
+residual.analysis(modelEstimation$model[[9]])
+residual.analysis(modelEstimation$model[[10]]) 
+residual.analysis(modelEstimation$model[[11]])
+residual.analysis(modelEstimation$model[[12]]) #residuals uncorrelated (6,1,5)
+residual.analysis(modelEstimation$model[[13]]) #residuals uncorrelated (6,1,6)
+residual.analysis(modelEstimation$model[[14]]) #residuals uncorrelated (6,1,11)
+residual.analysis(modelEstimation$model[[15]]) #residuals uncorrelated (11,1,11)
+
+```
+
+1. Models with significant coefficients
+2. Residual analysis (Ljung-Box Test)
+
+
+```{r}
+b.212 <- arima(bitcoin.r, order=c(2,1,2), method = 'ML')
+                coeftest(b.212)
+arima.test(b.212)
+
+```
+
+No statistically signficant lags. 
+
+```{r}
+b.214 <- arima(bitcoin.r, order=c(2,1,4), method = 'ML')
+                coeftest(b.214)
+arima.test(b.214)
+
+```
+
+NANs produced
+
+```{r}
+b.216 <- arima(bitcoin.r, order=c(2,1,6), method = 'ML')
+                coeftest(b.216)
+arima.test(b.216)
+
+```
+
+NANs produced
+
+```{r}
+b.412 <- arima(bitcoin.r, order=c(4,1,2), method = 'ML')
+                coeftest(b.412)
+arima.test(b.412)
+
+```
+
+NANs produced
+
+```{r}
+b.414 <- arima(bitcoin.r, order=c(4,1,4), method = 'ML')
+                coeftest(b.414)
+arima.test(b.414)
+
+```
+
+NANs produced
+
+```{r}
+b.416 <- arima(bitcoin.r, order=c(4,1,6), method = 'ML')
+                coeftest(b.416)
+arima.test(b.416)
+
+```
+
+NANs produced
+
+```{r}
+b.515 <- arima(bitcoin.r, order=c(5,1,5), method = 'ML')
+                coeftest(b.515)
+arima.test(b.515)
+
+```
+
+NANs produced
+
+```{r}
+b.516 <- arima(bitcoin.r, order=c(5,1,6), method = 'ML')
+                coeftest(b.516)
+arima.test(b.516)
+
+```
+
+Model has mostly signficant lags except AR4. -
+
+Histogram of residuals shows they are symmetrically distributed but the shape of the bell curve is very extreme. 
+
+The QQ Plot shows very thick tails indicating changing variance which will need to be handled. 
+
+Shapiro-Wilk result is a very small p-value, indicating the rejection of the null hypothesis of normally distributed residuals. 
+
+The ACF indicates no autocorrelation left in the residuals. 
+
+From the plot, there is still obvious volatility clustering that will need to be handled.
+
+The p-value of the Ljung-Box test is greater than 0.05, indicating that there is no signficant evidence to reject the null hypothesis that the residuals are uncorrelated. 
+
+This is a viable candidate. 
+
+```{r}
+b.610 <- arima(bitcoin.r, order=c(6,1,0), method = 'ML')
+                coeftest(b.610)
+arima.test(b.610)
+
+```
+
+All lags are significant.  
+
+Histogram of residuals shows they are symmetrically distributed but the shape of the bell curve is very extreme. 
+
+The QQ Plot shows very thick tails indicating changing variance which will need to be handled. 
+
+Shapiro-Wilk result is a very small p-value, indicating the rejection of the null hypothesis of normally distributed residuals. 
+
+The ACF indicates there is autocorrelation left in the residuals. The p-value of the Ljung-Box test is less than 0.05 after the third lag, indicating that there is sufficient evidence that the residuals are not uncorrelated. 
+
+Because the model fails to capture the autocorrelation of the series, this model is rejected. 
+
+```{r}
+b.612 <- arima(bitcoin.r, order=c(6,1,2), method = 'ML')
+                coeftest(b.612)
+arima.test(b.612)
+
+```
+
+Only the AR5, AR6 and MA1 lags are signficant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
+
+```{r}
+b.614 <- arima(bitcoin.r, order=c(6,1,4), method = 'ML')
+                coeftest(b.614)
+arima.test(b.614)
+
+```
+
+Only the AR3, MA1 and MA4 lags are significant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
+
+```{r}
+b.615 <- arima(bitcoin.r, order=c(6,1,5), method = 'ML')
+                coeftest(b.615)
+arima.test(b.615)
+
+```
+
+Most lags are signficant except AR5, AR6 and MA1. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
+
+```{r}
+b.616 <- arima(bitcoin.r, order=c(6,1,6), method = 'ML')
+                coeftest(b.616)
+arima.test(b.616)
+
+```
+
+NANs produced
+
+```{r}
+b.6111 <- arima(bitcoin.r, order=c(6,1,11), method = 'ML')
+                coeftest(b.6111)
+arima.test(b.6111)
+
+```
+
+Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
+
+```{r}
+b.11111 <- arima(bitcoin.r, order=c(11,1,11), method = 'ML')
+                coeftest(b.11111)
+arima.test(b.11111)
+
+```
+
+Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
+
+Based on this analysis, we can narrow down our selection of possible models. The models that successfully removed autocorrelation from the series were {ARIMA(5,1,6), ARIMA(6,1,4), ARIMA(6,1,5), ARIMA(6, 1, 11), ARIMA(11,1,11)}.
+
+### AIC BIC Ranking
+
+The Akaike Information Criterion (AIC) and Bayesian Information Criterion (BIC) score will be calculated for each model. The models will be ranked in descending order and the model with the lowest score will be selected.
+
+```{r}
+
+sort.score(AIC(b.516, b.612, b.614, b.615, b.6111, b.11111), score = "aic")
+# sort.score(AIC(b.516, b.612, b.614, b.615, b.6111, b.11111), score = "bic")
+AIC(b.516, b.612, b.614, b.615, b.6111, b.11111, k = log(28))
+
+#Note that sort.score function was obtained from the MATH1318 Canvas Shell under Module 7. 
+```
+
+### Final ARIMA Model Chosen:
+
+ARIMA(5,1,6) has the lowest score for both AIC and BIC. We also found that most of the coefficients generated by MLE for this model were statistically significant. Only AR4 was found to be insignificant, with the next coefficient, AR5, significant, so this is acceptable. Further, the ACF of the standardised residuals indicated the model sufficient captured the autocorrelation of the model, showing no significant lags. The p-value of the Ljung-Box test is greater than 0.05 for every lag, indicating that there is no signficant evidence to reject the null hypothesis that the residuals are uncorrelated. 
+
+From the standardised residuals plot, there is still obvious volatility clustering that will need to be examined further.
+
+
+### Overfitting Testing
+
+Before we accept ARIMA(5,1,6) as the chosen model, we will use overfitting; that is, we will confirm that the next-largest model does not perform better. Since ARIMA(6,1,6) was one of the candidate models, only ARIMA(5,1,7) will be tested. 
+
+```{r}
+b.517 <- arima(bitcoin.r, order=c(5,1,7), method = 'ML') #Elleni did not get NAs
+                coeftest(b.517)
+arima.test(b.517)
+
+AIC(b.516, b.517)
+
+```
+
+ARIMA(5,1,7) produced NAs as coefficient estimates. Although the models seems to have generated residuals free of autocorrelation, it also generated a higher AIC value than ARIMA(5,1,6). Therefore, there is no compelling evidence that the ARIMA(5,1,7) model performs better, so we can proceed with ARIMA(5,1,6).
+
+# 5. Modelling Conditional Variance with GARCH
+
+We can use ARIMA(5,1,6) to model and forecast future mean levels of Bitcoin prices. However, throughout the report so far there has been strong evidence of conditional variance (i.e. variance that changes over time). In the original time series plot (Figure 1), there was evidence of changing variance over time. Volatility clustering was even clearer in the plot of the log-transformed first difference of the series (Figure 7b). After our chosen ARIMA model was fitted, there was still volatility clustering present in the standardised residuals plot and in the the thick tails of the QQ Plot. 
+
+In order to incorporate this conditional variance into the Bitcoin Historical Prices series modelling, we will examine two transformations of the returns residuals and estimate orders p and q of GARCH to combine with ARIMA(5,1,6) so that we can model both mean and variance of the series. 
+
+## Confirming the Presence of ARCH
+
+### Plot of Standardised Residuals
+
+```{r}
+
+bitcoin.res <- rstandard(b.516)
+
+plot.compare.f(bitcoin.r, bitcoin.res, "Figure 10a: Plot of Returns Series ", "Figure 10b: Plot of ARIMA(5,1,6) \n Standardised Residuals")
+```
+
+In the plot of the residuals of the ARIMA(5,1,6) model, volatility clustering is still apparent.
+
+### ACF and PACF of Standardised Residuals
+
+```{r}
+acf.pacf.f(bitcoin.res, "ACF", "PACF")
+
+eacf(bitcoin.res)
+```
+
+The ACF, PACF and EACF of the residuals all indicate white noise. This can imply that the ARIMA model has perfectly captured autocorrelation but it can also indicate changing variance. 
+
+### Normality Test of Standardised Residuals 
+
+```{r}
+norm.f(bitcoin.res, "Histogram", "QQ Plot")
+```
+
+If the ARIMA(5,1,6) model had perfectly captured all the autocorrelation structure of the series, we would end up with i.i.d. variables in the residuals. However, looking at the QQ plot, it is clear the residuals do not follow the line of normal distribution. The fat tails on either end are an indicator of conditional variance in the series. 
+
+### McLeod-Li Test of Standardised Residuals 
+
+```{r}
+McLeod.Li.test(y = bitcoin.res, main = " Figure 12a: McLeod-Li Test Statistics", gof.lag = 30)
+```
+
+The null hypothesis of the McLeod-Li test is there is no Autoregressive Conditional Heteroskedasticity (ARCH) in the series. All p-values of the McLeod-Li test are statistically significant, indicating that we reject the null hypothesis and conclude there is ARCH behaviour in this series. 
+
+### ACF and PACF of Nonlinear Transformations
+
+If the residual values are truly independent, then applying nonlinear transformations to the data should not affect the autocorrelation structure of the data. We should still see no signficant lags in the ACF and PACF as is the case for the untransformed residuals. 
+
+```{r}
+
+#Absolute Value Transformtaion
+
+acf.pacf.f(abs(bitcoin.res), "Figure 11a: ACF of Abs. \n Transformed\n Standardised Residuals", "Figure 11b: PACF of Abs.\n Transformed \n Standardised Residuals")
+
+#Squared Value Transformtaion
+
+acf.pacf.f(bitcoin.res^2, "Figure 11c: ACF of Sqr. \n Transformed\n Standardised Residuals", "Figure 11d: PACF of Sqr.\n Transformed \n Standardised Residuals")
+
+
+```
+
+Comparing Figures 11a and 11b of the Absolute Values transformed residuals with Figures 11c and 11d of the Squared Values transformed residuals, the ACF and PACF of the different transformations are very different. Further, there are a large number of signficant lags. Therefore the assumption of i.i.d. residuals is violated. 
+
+This is sufficient evidence to conclude there is an ARCH behaviour in the variance of the series. We can estimate a GARCH component using the EACF of the transformed residuals to improve the accuracy of our ARIMA(5,1,6) model.
+
+## Estimate the Orders of GARCH 
+
+### EACF of Transformed Residuals
+
+```{r}
+eacf(abs(bitcoin.res))
+
+```
+
+For the Absolute Values Transformed Residuals, the vertex appears to fall at (2,2).
+
+Possible values of p: 2, 3. Possible values of q: 2, 3. Possible values of Max(p,q): 2,3
+
+Possible Models: {GARCH(2,2) GARCH(3,2), GARCH(3,3)}
+
+
+```{r}
+eacf((bitcoin.res)^2)  #Slightly different result with lambda exact box-cox 
+
+```
+
+The vertex is a bit less clear for the Squared Values Transformed Residuals, but possibly falls at (4,4) or (4,5).
+
+Possible values of p: 4, 5. Possible values of q: 4, 5, 6. Possible values of Max(p,q): 4, 5, 6
+
+Possible Models: {GARCH(4,4), GARCH(5,4). GARCH(5,5), GARCH(6,4), GARCH(6,5)}
+
+
+## Fit Parameter Estimates
+
+We will fit both the ARMIA(5,1,6) and the possible GARCH orders to the data. will look for the model with the lowest AIC score. Ideally, we will see mostly significant coefficients and some improvement to the residuals as well. 
+
+### Absolute Value Transformation
+
+GARCH(2,2)
+
+```{r}
+a.22 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(2, 2)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_22 <- ugarchfit(spec = a.22, data = bitcoin.r, out.sample = 100)
+m.56_22  # AIC = 5.4421
+plot(m.56_22, which = 8)
+plot(m.56_22, which = 9)
+plot(m.56_22, which = 10)
+
+
+```
+
+GARCH(3,2)
+
+```{r}
+a.32 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(3, 2)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_32 <- ugarchfit(spec = a.32, data = bitcoin.r, out.sample = 100)
+
+m.56_32  # AIC = 5.4454
+plot(m.56_32, which = 8)
+plot(m.56_32, which = 9)
+plot(m.56_32, which = 10)
+
+```
+
+GARCH(3,3)
+
+```{r}
+a.33 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(3, 3)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_33 <- ugarchfit(spec = a.33, data = bitcoin.r, out.sample = 100)
+
+m.56_33  # AIC = 5.4440
+plot(m.56_33, which = 8)
+plot(m.56_33, which = 9)
+plot(m.56_33, which = 10)
+
+```
+
+
+### Square Root Transformation
+
+GARCH(4,4)
+
+```{r}
+a.44 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(4, 4)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_44 <- ugarchfit(spec = a.44, data = bitcoin.r, out.sample = 100)
+m.56_44  # AIC = 5.4492
+plot(m.56_44, which = 8)
+plot(m.56_44, which = 9)
+plot(m.56_44, which = 10)
+
+```
+
+GARCH(5,4)
+
+```{r}
+a.54 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5, 4)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_54 <- ugarchfit(spec = a.54, data = bitcoin.r, out.sample = 100)
+m.56_54  # AIC = 5.4505
+plot(m.56_54, which = 8)
+plot(m.56_54, which = 9)
+plot(m.56_54, which = 10)
+
+```
+
+GARCH(5,5)
+
+```{r}
+a.55 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5, 5)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_55 <- ugarchfit(spec = a.55, data = bitcoin.r, out.sample = 100)
+m.56_55  # AIC = 5.4360
+plot(m.56_55, which = 8)
+plot(m.56_55, which = 9)
+plot(m.56_55, which = 10)
+
+```
+
+GARCH(6,5)
+
+```{r}
+a.65 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(6, 5)), 
+                   mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), 
+                   distribution.model = "norm")
+
+m.56_65 <- ugarchfit(spec = a.65, data = bitcoin.r, out.sample = 100)
+m.56_65  # AIC = 5.4472
+plot(m.56_65, which = 8)
+plot(m.56_65, which = 9)
+plot(m.56_65, which = 10)
+
+```
+
+## Final GARCH Model Chosen
+
+GARCH(5,5) had the lowest AIC score of 5.4360. 
+
+
+### Plot of Estimated Conditional Variances
+
+```{r}
+par(mfrow=c(1,1))
+plot(ts((fitted(m.56_55)[,1])^2, start = c(2013, 4, 27), freq = 365),type='l',ylab='Conditional Variance',xlab='t',main="Estimated Conditional Variances of the Daily Returns")
+```
+
+
+
+# 6. Forecasting Bitcoin Prices using ARIMA(5,1,6) + GARCH(5,5)
+
+
+```{r}
+spec <- ugarchspec(variance.model = list(model = "sGARCH",
+                                          garchOrder = c(5,5),
+                                          submodel = NULL,
+                                          external.regressors = NULL,
+                                          variance.targeting = FALSE),
+                    mean.model =   list(armaOrder = c(5,6),
+                                        external.regressors = NULL,
+                                        distribution.model = "norm",
+                                        start.pars = list(),
+                                        fixed.pars = list()))
+
+model.56_55 <- ugarchfit(spec = spec, data = bitcoin.r,
+                        solver.control = list(trace = 0))
+
+forc.56_55 = ugarchforecast(model.56_55, n.ahead = 10, data = bitcoin.r)
+
+
+#forc.56_55 = ugarchforecast(m.56_55, data = bitcoin.r, n.ahead = 10, n.roll = 10)
+
+plot(forc.56_55, which = 1)
+
+
+
+
+forc.vals <- as.vector(slot(forc.56_55,"forecast")$seriesFor)
+
+
+exp(diffinv(forc.vals, xi = bitcoin.r[1]))
+
+
+```
+
+
+```{r}
+# spec <- ugarchspec(variance.model = list(model = "sGARCH",
+#                                           garchOrder = c(5,5)),
+#                     mean.model =   list(armaOrder = c(5,6),
+#                                         include.mean = FALSE),
+#                                         distribution.model = "norm")
+# 
+# model.AR_GARCH <- ugarchfit(spec = spec, data = bitcoin.ts, out.sample = 10)
+#                              
+# forc.56_55 = ugarchforecast(model.AR_GARCH, data = bitcoin.r, n.ahead = 10, n.roll = 10)
+# plot(forc.56_55, which = "all")
+
+
+```
+
+
+# 7. MASE
+
+```{r}
+
+bit.obs <- read.csv("Bitcoin_Prices_Forecasts.csv", header = TRUE)
+head(bit.obs)
+
+forc.obs <- bit.obs[,2]
+forc.obs <- ts(forc.obs)
+
+class(forc.56_55)
+
+MASE = function(observed , fitted ){
+  # observed: Observed series on the forecast period
+  # fitted: Forecast values by your model
+  Y.t = observed
+  n = length(fitted)
+  e.t = Y.t - fitted
+  sum = 0 
+  for (i in 2:n){
+    sum = sum + abs(Y.t[i] - Y.t[i-1] )
+  }
+  q.t = e.t / (sum/(n-1))
+  MASE = data.frame( MASE = mean(abs(q.t)))
+  return(list(MASE = MASE))
+}
+
+
+forc.err <- MASE(forc.obs, forc.vals)
+
+forc.err
+
+```
+
+# Conclusion
+
