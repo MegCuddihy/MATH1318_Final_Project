@@ -91,16 +91,16 @@ arima.test <- function(model, fig_num){
   qqline(res, col = 2, lwd = 1, lty = 2)
   acf(res, main = paste0("Figure ",as.character(fig_num),"D: ACF of the Standardised Resiudals"), cex.main=0.8, cex.axis=0.8, cex.lab=0.8)
   par(mfrow = c(1,1))
-  tsdiag(model, gof = 15, omit.initial = F)
+  tsdiag(model, gof = 15, omit.initial = F, main="E:")
   print(shapiro.test(res))
 }
 
 arima.garch.residual.test <- function(model){
-  par(mfrow = c(1,3))
+  par(mfrow = c(1,2))
   plot(model, which = 8)
   plot(model, which = 9)
-  plot(model, which = 10)
   par(mfrow = c(1,1))
+  plot(model, which = 10)
 }
 
 # Obtained from the MATH1318 Canvas page for Module 7
@@ -114,6 +114,19 @@ sort.score <- function(x, score = c("bic", "aic")){
   }
 }
 
+# Capture AIC scores and sort score order
+sort.aic.garch <- function(models){
+  scores <- as.data.frame(matrix(nrow=length(models), ncol=2))
+  colnames(scores) <- c("Model","AIC")
+  for (i in 1:length(models)){ 
+    scores$Model[i] <- models[i]
+    scores$AIC[i] <- infocriteria(get(models[i]))[1] 
+  }
+  scores <- scores[order(scores$AIC),]
+  rownames(scores) <- 1:nrow(scores)
+  return(scores)
+}
+
 upperbound <- function(value, sigma){
   return(value + 1.96*sqrt(sigma))
 }
@@ -121,6 +134,70 @@ upperbound <- function(value, sigma){
 lowerbound <- function(value, sigma){
   return(value - 1.96*sqrt(sigma))
 }
+
+plot.reverse.forecast <- function(t.series, forc, n.ahead, title = NULL, zoomed.date = NULL, fig_num = NULL){
+  
+  forecasts <- forc@forecast$seriesFor
+  f <- frequency(t.series)
+  
+  # Store all forecast values
+  forecast.values <- as.data.frame(matrix(nrow=(n.ahead+1), ncol=9))
+  columns <- c('time','values.f', 'values.f.invd', 'values.f.invd.exp','sigma', 'sigma.invd', 'sigma.invd.exp',
+             'upper.values.f', 'lower.values.f')
+  colnames(forecast.values) <- columns
+  
+  # Store forecast time
+  forecast.values$time <- seq(time(t.series)[length(t.series)]+(1/f), (time(t.series)[length(t.series)]+(1/f))+(n.ahead*1/f), by=(1/f))
+  
+  # Store forecast values
+  forecast.values$values.f <- c(forecasts,NA)
+  
+  # Store forecast inverse difference values
+  forecast.values$values.f.invd <-  diffinv(as.vector(forecasts), xi=log(t.series[length(t.series)]))
+  
+  # Store forecast inverse exponent values
+  forecast.values$values.f.invd.exp <- exp(forecast.values$values.f.invd)
+  
+  # capture forecasted sigma values
+  forecast.values$sigma <- c(as.vector(forc@forecast$sigmaFor),NA)
+  
+  # inv difference for forecasted sigma values
+  forecast.values$sigma.invd <- diffinv(forecast.values$sigma[1:10], xi=log(sd(t.series)))
+  
+  # exp for forecasted sigma values
+  forecast.values$sigma.invd.exp <- exp(forecast.values$sigma.invd)
+  
+  # Upper and lower values of forecasted values
+  forecast.values$upper.values.f <- upperbound(forecast.values$values.f.invd.exp, forecast.values$sigma.invd.exp)
+  forecast.values$lower.values.f <- lowerbound(forecast.values$values.f.invd.exp, forecast.values$sigma.invd.exp)
+  
+  # Turn forecast values into their own timeseries
+  forecast.ts <- ts(forecast.values$values.f.invd.exp[1:10], start=(time(t.series)[length(t.series)]+(1/f)),frequency = f)
+
+  # Plot Normal series  
+  if (f == 365){
+    period = 'day'
+  } else if (f == 12) {
+    period = 'month'
+  } else if (f == 4) {
+    period = 'quarter'
+  } else {
+    period = 'period'
+  }
+  
+  plot(x = t.series, xlim=c(time(t.series)[1],time(t.series)[length(t.series)]+((n.ahead)/f)), ylab="", xlab="Year", main=paste0("Figure ",fig_num," A: ",title, " with ",n.ahead," ",period," forecast"), type="l", cex.main=0.8)
+  lines(forecast.ts, col="red", type="l")
+  polygon(c((forecast.values$time[1:10]),rev(forecast.values$time[1:10])), c(forecast.values$upper.values.f[1:10],rev(forecast.values$lower.values.f[1:10])), col=rgb(0,0,0.6,0.2), border=FALSE)
+  
+  if (!is.null(zoomed.date)){
+     # Plot Zoomed Series
+    plot(x = t.series, xlim=c(zoomed.date,time(t.series)[length(t.series)]+((n.ahead)/365)), ylim=c(3500,4200), ylab="", xlab="Year", main=paste0("Figure ", fig_num," B: ",title," with ",n.ahead," ", period, " forecast ", "(zoomed plot commencing at " , zoomed.date,")"), type="l", cex.main=0.8)
+    lines(forecast.ts, col="red", type="l")
+    polygon(c((forecast.values$time[1:10]),rev(forecast.values$time[1:10])),
+            c(forecast.values$upper.values.f[1:10],rev(forecast.values$lower.values.f[1:10])), col=rgb(0,0,0.6,0.2),
+            border=FALSE)
+  }
+} 
 
 MASE <- function(observed , fitted ){
   # observed: Observed series on the forecast period
@@ -136,184 +213,6 @@ MASE <- function(observed , fitted ){
   MASE = data.frame( MASE = mean(abs(q.t)))
   return(list(MASE = MASE))
 }
-
-# CAN DELETE ?? NOT USING
-# parameter.diagnostic <- function(data,method,p,d,q,title,fig_num){
-#   
-#   # which model is this parameter estimation, hypothesis test and diagnostic test for?
-#   print(paste0("model.",as.character(p),as.character(d),as.character(q)))
-#   
-#   # create the model
-#   if ('mle' %in% method){
-#     model.mle <- arima(data,order=c(p,d,q),method='ML')
-#     print('Hypothesis test for Maximum Likelihood Estimate method of coefficient estimation')
-#     print(coeftest(model.mle))
-#   }
-#   
-#   if ('lse' %in% method){
-#     model.lse <- arima(data,order=c(p,d,q),method='CSS')
-#     print('Hypothesis test for Least Squares Estimate method of coefficient estimation')
-#     print(coeftest(model.lse))
-#   }
-#   
-#   # prepare grid for plot
-#   par(mfrow=c(3,2))
-#   
-#   # plot of standardised residuals
-#   plot(rstandard(model.mle), ylab="Standardised Residuals", type="o", main=paste0("Figure ",fig_num,"A: Time Series Plot of standardised residuals for\n",title), cex.main=0.8)
-#   abline(h=0)
-#   
-#   # save the residuals to an object
-#   e <- residuals(model.mle)
-#   
-#   # Test normalcy by plotting the qq plot
-#   qqnorm(e, main=paste0("Figure ",fig_num,"B: Normal Q-Q Plot for residuals of\n",title), cex.main=0.8)
-#   qqline(e)
-#   
-#   # Test normalcy by histogram
-#   hist(e, xlab = 'Standardized Residuals', main=paste0("Figure ",fig_num,"C: Histogram of residuals"), cex.main=0.8)
-#   
-#   # Perform ACF/ PACF on the residual of the models
-#   acf(residuals(model.mle), main=paste0("Figure ",fig_num,"D: ACF of the residuals of the model") , cex.main=0.8)
-# 
-#   # Plot Box-Ljung test
-#   tsdiag(model.mle, gof=15, omit.initial=F)
-#   
-#   # progress fig_num
-#   fig_num = fig_num + 1
-#   
-#   # Execute a Box-Ljung test
-#   print(Box.test(residuals(model.mle), lag=6, type="Ljung-Box",fitdf=0))
-#   
-#   
-#   # Test normalcy with the shapiro test
-#   print(shapiro.test(e))
-#   
-#   
-#   return(model.mle)
-# }
-
-
-# myCandidate <- function(timeSeries, orderList,
-#                         methodType = c("CSS-ML", "ML", "CSS")[1],
-#                         fixedList = NULL, icSortBy = c("AIC", "AICc","BIC")[1],
-#                         ...){
-#   
-#   # timeSeries = the time series (a ts object)
-#   # orderList = a list object of c(p, d, q)
-#   # methodType = estimation method; default = "CSS-ML"
-#   # fixedList = a list object of free/fixed coefficient
-#   # icSortBy = information criterion (IC) to be used to sort the IC table
-#   #         : default value: by AIC
-#   # ... Additional arguments to be passed to Arima
-#   myCandidateEst <- list()
-#   n <- length(orderList)
-#   for(i in 1:n){
-#     order <- sapply(orderList,function(x) unlist(x))[,i]
-#     myCandidateEst[[i]] <- Arima(y = timeSeries, order = order, method = methodType)
-#   }
-#   significanceTest <- list()               # a list for significance tests
-#   ICTable <- matrix(NA, nrow = n, ncol = 6) # create a matrix to store IC
-#   for(i in 1:n){
-#     for(j in 1:3){
-#       ICTable[i,j] <- orderList[[i]][j]       # return the ARIMA orders
-#     }
-#       ICTable[i,4] <- myCandidateEst[[i]]$aic # 
-#       ICTable[i,5] <- myCandidateEst[[i]]$aicc
-#       ICTable[i,6] <- myCandidateEst[[i]]$bic
-#       
-#       significanceTest[[i]]<- coeftest(myCandidateEst[[i]])
-#   }
-#   
-#   ICTable <- data.frame(ICTable)
-#   names(ICTable) <- c('p', 'd', 'q', 'AIC', 'AICc', 'BIC')
-#   
-#   if(icSortBy == "AIC"){
-#     ICTable <- ICTable[order(ICTable$AIC),] # sort the table by AIC
-#   }else if(icSortBy == "AICc"){
-#     ICTable <- ICTable[order(ICTable$AICc),] # sort the table by AICc
-#   }else if(icSortBy == "BIC"){
-#     ICTable <- ICTable[order(ICTable$BIC),]
-#   }else{
-#     stop("Incorrect Information Criterion")
-#   }
-#   
-#   
-#   myCandidateEst <- list(model = myCandidateEst, IC = ICTable,
-#                          significanceTest = significanceTest,
-#                          orderList = orderList)
-#   return(myCandidateEst)
-# }
-
-# openGraph = function( width=7 , height=7 , mag=1.0 , ... ) {
-#   if ( .Platform$OS.type != "windows" ) { # Mac OS, Linux
-#     tryInfo = try( X11( width=width*mag , height=height*mag , type="cairo" , 
-#                         ... ) )
-#     if ( class(tryInfo)=="try-error" ) {
-#       lineInput = readline("WARNING: Previous graphics windows will be closed because of too many open windows.\nTO CONTINUE, PRESS <ENTER> IN R CONSOLE.\n")
-#       graphics.off() 
-#       X11( width=width*mag , height=height*mag , type="cairo" , ... )
-#     }
-#   } else { # Windows OS
-#     tryInfo = try( windows( width=width*mag , height=height*mag , ... ) )
-#     if ( class(tryInfo)=="try-error" ) {
-#       lineInput = readline("WARNING: Previous graphics windows will be closed because of too many open windows.\nTO CONTINUE, PRESS <ENTER> IN R CONSOLE.\n")
-#       graphics.off() 
-#       windows( width=width*mag , height=height*mag , ... )    
-#     }
-#   }
-# }
-
-
-# ARIMAdiagnostic <- function(model, lagNumber, 
-#                             openPlot = c(TRUE, FALSE)[2]){
-#   
-#   e <- residuals(model)   # residuals
-#   er <- rstandard(model)   # standardized residuals
-#   if(openPlot == TRUE){
-#     openGraph(width=7 , height=7 , mag=1.0)
-#     par(mfrow = c(3,2))
-#   }
-#   
-#   # QQ Plot
-#   qqnorm(er, main = "", ylab = "QQ of Residuals")
-#   qqline(er, col = "red")
-#   
-#   # Standardised residual plot
-#   
-#   plot(e, type = "n", main = "", ylab = "Standardized Residuals")
-#   abline(h=c(-3,0,3),col = c("red","black", "red"), lty = c("dotted", "solid", "dotted"))
-#   points(e, pch = 1, cex = 0.5)
-#   
-#   # ACF/PACF Graphs
-#   
-#   Acf(e, main = "", lag.max = lagNumber)
-#   Pacf(e, main = "", lag.max =lagNumber)
-#   
-#   # Histogram
-#   
-#   hist(er, breaks = "FD", freq  = FALSE, col = "gray", border = "white",
-#        main = "", ylab = "Density Function", xlab = "Standardized Residuals")
-#   x <- seq(min(er),max(er), by = 0.001)  # add the theoretical z-distribution
-#   lines(x, dnorm(x), col = "red")
-#   legend("topleft", legend = c("Sample","Theoretical"), col = c("gray", "red"),
-#          pch = 15, bty = "n")
-#   
-#   # P-Value for Ljung-Box
-#   
-#   pValue <- rep(0, lagNumber)
-#   for(j in 0:lagNumber){
-#     pValue[j] <- Box.test(e, lag = j, type = "Ljung-Box", fitdf = 0)$p.value
-#   }
-#   plot(pValue, ylim = c(0,1), type = "n", ylab = "P-values",
-#        xlab = "Lags")
-#   points(pValue)
-#   abline(h = 0.05, col = "red", lty = "dotted")
-#   
-#   par(mfrow = c(1,1))
-#   
-# }
-
 
 ```
 
@@ -576,13 +475,9 @@ The methodology for chosing the best ARIMA model will firstly involve fitting ea
 
 **ARIMA(2,1,2)**
 
-NEW TEXT? 
-In our first ARIMA test we explore the candidate ARIMA(2,1,2) model. In the coefficient test we can see that we have coefficients that are all statistically insignificant (with a p-value greater that the significance level of 0.05), alluding to this candidate model not capturing the series well. 
+In our first ARIMA test we explore the candidate ARIMA(2,1,2) model. In the coefficient test we can see that we have two coefficients that are statistically insignificant (with a p-value greater that the significance level of 0.05) and two values with NAs in the Standard Error and p-values of the coefficients.Insignificant p-values allude to the fact that this candidate model does not capture the series well.  **<Insert what NAs mean>**
 
-In the Ljung Box test we have no statistically signficant lags. 
-
-DRAFT TEXT?
-No statistically signficant lags. 
+In the ACF plot of Standardised Residuals (figure 9D) we still have significant ACF lags, corresponding to some autocorrelation left in the residuals. In the Ljung Box test (titled p-values for Ljung Box statistic) we have a mix of  statistically signficant and statistically insignificant lags. 
 
 ```{r}
 b.212 <- arima(bitcoin.log, order=c(2,1,2), method = 'ML')
@@ -594,11 +489,9 @@ arima.test(b.212, 9)
 
 **ARIMA(2,1,4)**
 
-NEW TEXT? 
-The next canidate model, ARIMA(2,1,2), is tested below. In the coefficient test we can see NAs given for the standard error and p value for half of the estimated coefficients. <Insert what NAs in the Standard Error/ pvalue means, what can we conclude from this >
+The next canidate model, ARIMA(2,1,2), is tested below. In the coefficient test we can see only two statistically significant MA coefficients ($\theta_2$ and $\theta_4$) with the rest of the coefficient estimates being statistically insignificant. 
 
-DRAFT TEXT?
-NANs produced
+In the ACF plot of Standardised Residuals (figure 10D) we again still have significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having mainly statistically insignificant lags.
 
 ```{r}
 b.214 <- arima(bitcoin.log, order=c(2,1,4), method = 'ML')
@@ -610,10 +503,12 @@ arima.test(b.214, 10)
 
 **ARIMA(2,1,6)**
 
-With the cadidate model ARIMA(2,1,2) the coefficient test also estimates coefficients with NA values for their Standard Error and p value. <Insert confirmation of what it means and what we conclude>
+With the candidate model ARIMA(2,1,2) half the coefficients are statistically significant ($\phi_1$, $\phi_2$, $\theta_1$ and $\theta_2$).
 
-DRAFT TEXT:
-NANs produced
+In the ACF plot of Standardised Residuals (figure 11D) we only have late significant ACF lags.
+
+The Ljung-Box test (titled p-values for Ljung Box statistic) we have no lags that fall below the significant level, meaning that there is no significant autocorrelation left in the lags of the residuals of this candidate model.
+
 
 ```{r}
 b.216 <- arima(bitcoin.log, order=c(2,1,6), method = 'ML')
@@ -625,7 +520,7 @@ arima.test(b.216, 11)
 
 **ARIMA(4,1,2)**
 
-In the candidate model ARIMA(4,1,2) we yet again produce NAs in the NANs produced
+In the candidate model ARIMA(4,1,2) we have only one statistically significant coefficient ($\phi_4$). We can see late lags in the ACF plot of residuals (plot 12D) but we also see that the Ljung-Box test on the candidate model's residuals show some lags that are statistically significant. We interpret this to mean that there is some autocorrelation left in these lags.
 
 ```{r}
 b.412 <- arima(bitcoin.log, order=c(4,1,2), method = 'ML')
@@ -637,15 +532,27 @@ arima.test(b.412, 12)
 
 **ARIMA(4,1,4)**
 
+In the candidate model ARIMA(4,1,4) we have the first candidate model with all coefficients returning statistically significant. 
+
+In the plot of the standardised residuals (Figure 13A) we see points hovering over a mean value of 0, however they are not independantly distributed. We still changes in variation across the residual plot. 
+
+In the ACF plot of Standardised Residuals (figure 13D) we only have late significant ACF lags. The Ljung-Box test (titled p-values for Ljung Box statistic) also has no lags that fall below the significant level, meaning that there is no significant autocorrelation left.
+
+This candidate model seems promising in consideration for the capturing the ARIMA component of the Bitcoin series.
+
 ```{r}
 b.414 <- arima(bitcoin.log, order=c(4,1,4), method = 'ML')
 coeftest(b.414)
 arima.test(b.414, 13)
 ```
 
-NANs produced
+
 
 **ARIMA(4,1,6)**
+
+In the candidate model ARIMA(4,1,6) we only three statistically significant coefficients ($\phi_4$, $\theta_4$ and $\theta_6$)
+
+In the ACF plot of Standardised Residuals (figure 13D) we only have late significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having statistically significant lags.
 
 ```{r}
 b.416 <- arima(bitcoin.log, order=c(4,1,6), method = 'ML')
@@ -653,9 +560,12 @@ coeftest(b.416)
 arima.test(b.416, 14)
 ```
 
-NANs produced
 
-**ARIMA(5,1,5)**
+**<UP TO HERE - THE REST IS MEG'S WRITING BASED ON PREVIOUS USE OF WRONG OBJECT. WE NEED TO MAKE SURE IT READS CORRECTLY >**
+
+**ARIMA(5,1,5)** 
+
+NANs produced
 
 ```{r}
 b.515 <- arima(bitcoin.log, order=c(5,1,5), method = 'ML')
@@ -663,17 +573,12 @@ coeftest(b.515)
 arima.test(b.515, 15)
 ```
 
-NANs produced
+
 
 **ARIMA(5,1,6)**
 
 Testing the hypothesised ARIMA(5,1,6) model below.
 
-```{r}
-b.516 <- arima(bitcoin.log, order=c(5,1,6), method = 'ML')
-coeftest(b.516)
-arima.test(b.516, 16)
-```
 The proposed model has mostly signficant lags except AR4. -
 
 Histogram of residuals shows they are symmetrically distributed but the shape of the bell curve is very extreme. 
@@ -690,14 +595,15 @@ The p-value of the Ljung-Box test is greater than 0.05, indicating that there is
 
 This is a viable candidate. 
 
+```{r}
+b.516 <- arima(bitcoin.log, order=c(5,1,6), method = 'ML')
+coeftest(b.516)
+arima.test(b.516, 16)
+```
+
+
 
 **ARIMA(6,1,0)**
-
-```{r}
-b.610 <- arima(bitcoin.log, order=c(6,1,0), method = 'ML')
-coeftest(b.610)
-arima.test(b.610, 17)
-```
 
 All lags are significant.  
 
@@ -709,9 +615,19 @@ Shapiro-Wilk result is a very small p-value, indicating the rejection of the nul
 
 The ACF indicates there is autocorrelation left in the residuals. The p-value of the Ljung-Box test is less than 0.05 after the third lag, indicating that there is sufficient evidence that the residuals are not uncorrelated. 
 
-Because the model fails to capture the autocorrelation of the series, this model is rejected. 
+Because the model fails to capture the autocorrelation of the series, this model is rejected.
+
+```{r}
+b.610 <- arima(bitcoin.log, order=c(6,1,0), method = 'ML')
+coeftest(b.610)
+arima.test(b.610, 17)
+```
+
+ 
 
 **ARIMA(6,1,2)**
+
+Only the AR5, AR6 and MA1 lags are signficant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
 
 ```{r}
 b.612 <- arima(bitcoin.log, order=c(6,1,2), method = 'ML')
@@ -719,9 +635,11 @@ coeftest(b.612)
 arima.test(b.612, 18)
 ```
 
-Only the AR5, AR6 and MA1 lags are signficant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
+
 
 **ARIMA(6,1,4)**
+
+Only the AR3, MA1 and MA4 lags are significant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
 
 ```{r}
 b.614 <- arima(bitcoin.log, order=c(6,1,4), method = 'ML')
@@ -729,10 +647,12 @@ coeftest(b.614)
 arima.test(b.614, 19)
 ```
 
-Only the AR3, MA1 and MA4 lags are significant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
+
 
 
 **ARIMA(6,1,5)**
+
+Most lags are signficant except AR5, AR6 and MA1. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
 
 ```{r}
 b.615 <- arima(bitcoin.log, order=c(6,1,5), method = 'ML')
@@ -740,9 +660,11 @@ coeftest(b.615)
 arima.test(b.615, 20)
 ```
 
-Most lags are signficant except AR5, AR6 and MA1. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
+
 
 **ARIMA(6,1,6)**
+
+NANs produced
 
 ```{r}
 b.616 <- arima(bitcoin.log, order=c(6,1,6), method = 'ML')
@@ -750,9 +672,11 @@ coeftest(b.616)
 arima.test(b.616, 21)
 ```
 
-NANs produced
+
 
 **ARIMA(6,1,11)**
+
+Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
 
 ```{r}
 b.6111 <- arima(bitcoin.log, order=c(6,1,11), method = 'ML')
@@ -760,9 +684,13 @@ coeftest(b.6111)
 arima.test(b.6111, 22)
 ```
 
-Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
+
 
 **ARIMA(11,1,11)**
+
+Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
+
+Based on this analysis, we can narrow down our selection of possible models. The models that successfully removed autocorrelation from the series were {ARIMA(5,1,6), ARIMA(6,1,4), ARIMA(6,1,5), ARIMA(6, 1, 11), ARIMA(11,1,11)}.
 
 ```{r}
 b.11111 <- arima(bitcoin.log, order=c(11,1,11), method = 'ML')
@@ -770,9 +698,7 @@ coeftest(b.11111)
 arima.test(b.11111, 23)
 ```
 
-Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
 
-Based on this analysis, we can narrow down our selection of possible models. The models that successfully removed autocorrelation from the series were {ARIMA(5,1,6), ARIMA(6,1,4), ARIMA(6,1,5), ARIMA(6, 1, 11), ARIMA(11,1,11)}.
 
 
 
@@ -881,7 +807,6 @@ acf.pacf.f(abs(bitcoin.res), "Figure 11a: ACF of Abs. \n Transformed\n Standardi
 #Squared Value Transformtaion
 acf.pacf.f(bitcoin.res^2, "Figure 11c: ACF of Sqr. \n Transformed\n Standardised Residuals", "Figure 11d: PACF of Sqr.\n Transformed \n Standardised Residuals")
 
-
 ```
 
 Comparing Figures 11a and 11b of the Absolute Values transformed residuals with Figures 11c and 11d of the Squared Values transformed residuals, the ACF and PACF of the different transformations are very different. Further, there are a large number of signficant lags. Therefore the assumption of i.i.d. residuals is violated. 
@@ -894,7 +819,6 @@ This is sufficient evidence to conclude there is an ARCH behaviour in the varian
 
 ```{r}
 eacf(abs(bitcoin.res))
-
 ```
 
 For the Absolute Values Transformed Residuals, the vertex appears to fall at (2,2).
@@ -921,88 +845,102 @@ We will fit both the ARMIA(5,1,6) and the possible GARCH orders to the data. wil
 
 ### Absolute Value Transformation
 
-GARCH(2,2)
+**GARCH(2,2)
 
-```{r}
+```{r, fig.asp = 0.4}
 a.22 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(2, 2)), mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
 m.56_22 <- ugarchfit(spec = a.22, data = bitcoin.r, out.sample = 100)
-m.56_22  # AIC = 5.4421
+#m.56_22
+m.56_22@fit$matcoef  
+infocriteria(m.56_22)
 arima.garch.residual.test(m.56_22)
-
-
 ```
 
-GARCH(3,2)
+**GARCH(3,2)**
 
-```{r}
+```{r, fig.asp = 0.4}
 a.32 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(3, 2)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
 
 m.56_32 <- ugarchfit(spec = a.32, data = bitcoin.r, out.sample = 100)
-m.56_32  # AIC = 5.4454
+# m.56_32  
+m.56_32@fit$matcoef  
+infocriteria(m.56_32)
 arima.garch.residual.test(m.56_32)
-
 ```
 
-GARCH(3,3)
+**GARCH(3,3)**
 
-```{r}
+```{r, fig.asp = 0.4}
 a.33 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(3, 3)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), distribution.model = "norm")
 
 m.56_33 <- ugarchfit(spec = a.33, data = bitcoin.r, out.sample = 100)
-m.56_33  # AIC = 5.4440
+#m.56_33 
+m.56_33@fit$matcoef  
+infocriteria(m.56_33)
 arima.garch.residual.test(m.56_33)
 ```
 
 
 ### Square Root Transformation
 
-GARCH(4,4)
+**GARCH(4,4)**
 
-```{r}
+```{r, fig.asp = 0.4}
 a.44 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(4, 4)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
-
 m.56_44 <- ugarchfit(spec = a.44, data = bitcoin.r, out.sample = 100)
-m.56_44  # AIC = 5.4492
+# m.56_44 
+m.56_44@fit$matcoef  
+infocriteria(m.56_44)
 arima.garch.residual.test(m.56_44)
-
 ```
 
-GARCH(5,4)
+**GARCH(5,4)**
 
-```{r}
+```{r, fig.asp = 0.4}
 a.54 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5, 4)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
-
 m.56_54 <- ugarchfit(spec = a.54, data = bitcoin.r, out.sample = 100)
-m.56_54  # AIC = 5.4505
+# m.56_54 
+m.56_54@fit$matcoef  
+infocriteria(m.56_54)
 arima.garch.residual.test(m.56_54)
 ```
 
-GARCH(5,5)
+**GARCH(5,5)**
 
-```{r}
+```{r, fig.asp = 0.4}
 a.55 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5, 5)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
-
 m.56_55 <- ugarchfit(spec = a.55, data = bitcoin.r, out.sample = 100)
-m.56_55  # AIC = 5.4360
+# m.56_55 
+m.56_55@fit$matcoef  
+infocriteria(m.56_55) 
 arima.garch.residual.test(m.56_55)
 ```
 
-GARCH(6,5)
+**GARCH(6,5)**
 
-```{r}
+```{r, fig.asp = 0.4}
 a.65 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(6, 5)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
-
 m.56_65 <- ugarchfit(spec = a.65, data = bitcoin.r, out.sample = 100)
-m.56_65  # AIC = 5.4472
+# m.56_65
+m.56_65@fit$matcoef  
+infocriteria(m.56_65)
 arima.garch.residual.test(m.56_65)
 ```
 
 ## Final GARCH Model Chosen
 
-GARCH(5,5) had the lowest AIC score of 5.4360. 
+Sorting the AIC scores we can see that the GARCH(5,5) has the lowest of -3.776510. <Insert line about 'As the statistical explorations above also support this we select this as the best model' > 
+
+```{r}
+sort.aic.garch(c('m.56_22', 'm.56_32', 'm.56_33', 'm.56_44', 'm.56_54', 'm.56_55', 'm.56_65'))
+```
+
+
 
 
 ### Plot of Estimated Conditional Variances
+
+**< Comments about this ?? >**
 
 ```{r}
 par(mfrow=c(1,1))
@@ -1013,9 +951,9 @@ plot(ts((fitted(m.56_55)[,1])^2, start = c(2013, 4, 27), freq = 365),type='l',yl
 
 # 6. Forecasting Bitcoin Prices using ARIMA(5,1,6) + GARCH(5,5)
 
-In forecasting, accuracy of a model is measured by the mean absolute scaled error. Capturing the forecast from the model and calculating the MASE of not just the forecasted values, but also the values of the fitted model will dictate the overall accuracy.
+In forecasting, accuracy of a model is measured by the mean absolute scaled error. Capturing the forecasted values from the model and calculating the MASE with them and also the values of the fitted model will dictate the overall accuracy.
 
-Firstly a dataframe is created for capturing the scores, and the observed Bitcoin forecasts are imported.
+To do this we first create a dataframe for capturing the scores. The observed (real) Bitcoin values for the forecast period is imported.
 
 ```{r}
 # Preparation for MASE
@@ -1025,8 +963,7 @@ mase_results <- as.data.frame(matrix(nrow=2, ncol=2))
 colnames(mase_results) <- c("", "BEST MASE")
 ```
 
-
-The chosen ARIMA/ GARCH model 
+The chosen ARIMA/ GARCH model is fitted using the chosen orders (ARIMA(5,1,6) x GARCH(5,5)). The model is fitted using the differenced and log transformed bitcoin series.
 
 ```{r warning=FALSE}
 # Fitting the ARIMA/ GARCH model
@@ -1034,15 +971,11 @@ model <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5,5),
 m.fit <- ugarchfit(spec = model, data = diff(log(bitcoin.ts)), solver.control = list(trace = 0))
 ```
 
-
-
-
 **MASE over fitted values**
 
-
+Capturing the fitted values, we must inversed the first difference (using the log of the first bitcoin value in the xi parameter). Once the inverse differenced values are captured, the exponent of these values are also executed, thus also reversing the log transformation in the values. Running the MASE function with the original timeseries values and the untransformed, inversed differenced fitted values for the ARIMA/ GARCH model, we receive a MASE score of 19.43986 for the Fitted Values.
 
 ```{r warning=FALSE}
-
 fitted.values <- fitted(m.fit)
 
 # Inversing the difference for the fitted values
@@ -1060,9 +993,9 @@ mase_results[1,] <- c("Over Fitted Values",MASE(bitcoin.ts,fitted.values.invdiff
 
 **MASE over the forecasts**
 
+Capturing the forecasted values, we again inverse the first difference (using the log of the LAST bitcoin value in the xi parameter). After this, we yet again capture the exponent of these values. We run these values with the supplied real values for the forecast period to get a MASE score of 1.26147688 for the forecasted values.
+
 ```{r warning=FALSE}
-
-
 forc <- ugarchforecast(m.fit, n.ahead = 10 ,data = diff(log(bitcoin.ts)))
 plot(forc, which = 1)
 forecasts <- forc@forecast$seriesFor
@@ -1077,142 +1010,49 @@ forecasts.invdiff.exp <- exp(forecasts.invdiff)
 mase_results[2,] <- c("Over Forecasts",MASE(observed,forecasts.invdiff.exp[1:10])$MASE$MASE)
 ```
 
+**Plot original timeseries with inverse differenced and untransformed forecasts**
 
-
-
-## Two plot versions
-
-# A: create upper and lower bounds from forecast sigmas then reverse difference + transformation
+The plot of the inversed differenced and untransformed forecast are plotted below with the original timeseries. The confidence intervals are generated by capturing the sigmas (standard deviation) of the forecast values, and also by reversing the differencing and log transformations that are inherently captured in these sigma values. The upper and lower bounds for the forecasts are then calculated and turned into a polygon shape outlines the confidence intervals for the prediction. Figure XXB shows a zoomed in plot so the forecast line and confidence intervals can be seen clearly. The zoomed in series displays the series from August 2018.
 
 ```{r}
-
-# Store all forecast values
-n.ahead= 10
-forecast.values <- as.data.frame(matrix(nrow=11, ncol=11))
-columns <- c('time','values.f', 'values.f.invd', 'values.f.invd.exp','sigma', 'upper.values.f', 'upper.values.f.invd','upper.values.f.invd.exp','lower.values.f','lower.values.f.invd','lower.values.f.invd.exp')
-colnames(forecast.values) <- columns
-
-# Store forecast time
-forecast.values$time <- seq(time(bitcoin.ts)[length(bitcoin.ts)]+(1/365), (time(bitcoin.ts)[length(bitcoin.ts)]+(1/365))+(n.ahead*1/365), by=(1/365))
-
-# Store forecast values
-forecast.values$values.f <- c(forecasts,NA)
-
-# Store forecast inverse difference values
-forecast.values$values.f.invd <- forecasts.invdiff
-
-# Store forecast inverse exponent values
-forecast.values$values.f.invd.exp <- forecasts.invdiff.exp
-
-# capture forecasted sigma values
-forecast.values$sigma <- c(as.vector(forc@forecast$sigmaFor),NA)
-
-# Upper and lower values of forecasted values
-forecast.values$upper.values.f <- upperbound(forecast.values$values.f, forecast.values$sigma)
-forecast.values$lower.values.f <- lowerbound(forecast.values$values.f, forecast.values$sigma)
-
-# inverse difference of upper and lower forecasted values
-forecast.values$upper.values.f.invd <- diffinv(forecast.values$upper.values.f[1:10], xi=upperbound(log(bitcoin.ts[length(bitcoin.ts)]),log(sd(bitcoin.ts))))
-forecast.values$lower.values.f.invd <- diffinv(forecast.values$lower.values.f[1:10], xi=lowerbound(log(bitcoin.ts[length(bitcoin.ts)]),log(sd(bitcoin.ts))))
-
-# inverse transformatio of upper and lower forecasted values
-forecast.values$upper.values.f.invd.exp <- exp(forecast.values$upper.values.f.invd)
-forecast.values$lower.values.f.invd.exp <- exp(forecast.values$lower.values.f.invd)
-```
-
-```{r}
-forecast.ts <- ts(forecast.values$values.f.invd.exp, start=(time(bitcoin.ts)[length(bitcoin.ts)]+(1/365)),frequency = 365)
-
-plot(x = bitcoin.ts, xlim=c(time(bitcoin.ts)[1],time(bitcoin.ts)[length(bitcoin.ts)]+((n.ahead)/365)), ylab="", xlab="Year", main="A: Bitcoin time series with 10 day forecast", type="l", cex.main=0.8)
-lines(forecast.ts, col="red", type="l")
-polygon(c((forecast.values$time[1:10]),rev(forecast.values$time[1:10])), c(forecast.values$upper.values.f.invd.exp[1:10],rev(forecast.values$lower.values.f.invd.exp[1:10])), col=rgb(0,0,0.6,0.2), border=FALSE)
-
-plot(x = bitcoin.ts, xlim=c(2018,time(bitcoin.ts)[length(bitcoin.ts)]+((n.ahead)/365)), ylab="", xlab="Year", main="B: Bitcoin time series with 10 day forecast\n Zoomed to 2018 and after only", type="l", cex.main=0.8)
-lines(forecast.ts, col="red", type="l")
-polygon(c((forecast.values$time[1:10]),rev(forecast.values$time[1:10])), c(forecast.values$upper.values.f.invd.exp[1:10],rev(forecast.values$lower.values.f.invd.exp[1:10])), col=rgb(0,0,0.6,0.2), border=FALSE)
-
-```
-
-
-# B: Reversing difference and transformation first then calculating upper and lower bounds
-
-```{r}
-
-# To plot series - 
-
-# Store all forecast values
-n.ahead= 10
-forecast.values <- as.data.frame(matrix(nrow=11, ncol=9))
-columns <- c('time','values.f', 'values.f.invd', 'values.f.invd.exp','sigma', 'sigma.invd', 'sigma.invd.exp',
-             'upper.values.f', 'lower.values.f')
-colnames(forecast.values) <- columns
-
-# Store forecast time
-forecast.values$time <- seq(time(bitcoin.ts)[length(bitcoin.ts)]+(1/365), (time(bitcoin.ts)[length(bitcoin.ts)]+(1/365))+(n.ahead*1/365), by=(1/365))
-
-# Store forecast values
-forecast.values$values.f <- c(forecasts,NA)
-
-# Store forecast inverse difference values
-forecast.values$values.f.invd <- forecasts.invdiff
-
-# Store forecast inverse exponent values
-forecast.values$values.f.invd.exp <- forecasts.invdiff.exp
-
-# capture forecasted sigma values
-forecast.values$sigma <- c(as.vector(forc@forecast$sigmaFor),NA)
-
-# inv difference for forecasted sigma values
-forecast.values$sigma.invd <- diffinv(forecast.values$sigma[1:10], xi=log(sd(bitcoin.ts)))
-
-# exp for forecasted sigma values
-forecast.values$sigma.invd.exp <- exp(forecast.values$sigma.invd)
-
-# Upper and lower values of forecasted values
-forecast.values$upper.values.f <- upperbound(forecast.values$values.f.invd.exp, forecast.values$sigma.invd.exp)
-forecast.values$lower.values.f <- lowerbound(forecast.values$values.f.invd.exp, forecast.values$sigma.invd.exp)
-
-```
-
-```{r}
-forecast.ts <- ts(forecast.values$values.f.invd.exp, start=(time(bitcoin.ts)[length(bitcoin.ts)]+(1/365)),frequency = 365)
-
-
-plot(x = bitcoin.ts, xlim=c(time(bitcoin.ts)[1],time(bitcoin.ts)[length(bitcoin.ts)]+((n.ahead)/365)), ylab="", xlab="Year", main="A: Bitcoin time series with 10 day forecast", type="l", cex.main=0.8)
-lines(forecast.ts, col="red", type="l")
-polygon(c((forecast.values$time[1:10]),rev(forecast.values$time[1:10])), c(forecast.values$upper.values.f[1:10],rev(forecast.values$lower.values.f[1:10])), col=rgb(0,0,0.6,0.2), border=FALSE)
-
-
-plot(x = bitcoin.ts, xlim=c(2018,time(bitcoin.ts)[length(bitcoin.ts)]+((n.ahead)/365)), ylim=c(0,8000), ylab="", xlab="Year", main="B: Bitcoin time series with 10 day forecast\n Displaying only post 2018", type="l", cex.main=0.8)
-lines(forecast.ts, col="red", type="l")
-polygon(c((forecast.values$time[1:10]),rev(forecast.values$time[1:10])), c(forecast.values$upper.values.f[1:10],rev(forecast.values$lower.values.f[1:10])), col=rgb(0,0,0.6,0.2), border=FALSE)
-
+plot.reverse.forecast(bitcoin.ts, forc, n.ahead=10, title="Bitcoin time series", zoomed.date = 2018.8, fig_num = 40)
 ```
 
 
 # 7. MASE
 
-
+The overall MASE results are therefore as follows: 
 
 ```{r}
 mase_results
 ```
 
 
-# Limitations
+# Limitations and reccomendations
 
+**< copied from slack...Need to amend>**
+
+< Meg's words>
 My interpretation of limitations would be that our chosen GARCH model does not have the world's greatest residuals. The QQ Plot tails are still fat and there are significant lags in the ACF of the residuals. But maybe we can tie the two together by saying none of the ARIMA GARCH models are perfect and then go into the difficulty of fitting models to financial data more generally
 
+< Sam's words>
 Would be that we understand what to expect in regard to the 'sudden outbreaks at irregular intervals with periods of low and high volatility', so this justifies the use of a hybrid ARIMA GARCH model, given that the nonlinear patterns in the residuals of the fitted ARIMA model, being that the GARCH component is equipped for dealing with changes in variance. Comparitively, the GARCH option over the ARCH extension to the ARIMA model is preferable given that the distant volatility in the series is given lesser weight. This may improve upon the fitted model given that for the first half of time series, very little variance was noted compared to the exponential boom and  sudden crash that occurred soon after. This intervention points would still be provided with less weight compared to the changes in variance found in the latter part of the series.
 
 # Conclusion
+
+<Insert conclusion>
+
 
 # References
 
 Wikipedia 2019, **Bitcoin**, Wikipedia, viewed 29 May 2019, <https://en.wikipedia.org/wiki/Bitcoin>.
 
-Statement of Jennifer Shasky Calvery, Director
+??Statement of Jennifer Shasky Calvery, Director
 Financial Crimes Enforcement Network United States Department of the Treasury, Nov 18, 2013
+
+# Appendix
+
+< When the project is finished we need to copy the functions and comment what each does >
 
 
 
