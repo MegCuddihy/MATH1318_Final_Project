@@ -587,7 +587,7 @@ No statistically signficant lags.
 ```{r}
 b.212 <- arima(bitcoin.log, order=c(2,1,2), method = 'ML')
 coeftest(b.212)
-#arima.test(b.212, 9)
+arima.test(b.212, 9)
 ```
 
 
@@ -603,7 +603,7 @@ NANs produced
 ```{r}
 b.214 <- arima(bitcoin.log, order=c(2,1,4), method = 'ML')
 coeftest(b.214)
-# arima.test(b.214, 10)
+arima.test(b.214, 10)
 ```
 
 
@@ -618,7 +618,7 @@ NANs produced
 ```{r}
 b.216 <- arima(bitcoin.log, order=c(2,1,6), method = 'ML')
 coeftest(b.216)
-#arima.test(b.216, 11)
+arima.test(b.216, 11)
 ```
 
 
@@ -630,7 +630,7 @@ In the candidate model ARIMA(4,1,2) we yet again produce NAs in the NANs produce
 ```{r}
 b.412 <- arima(bitcoin.log, order=c(4,1,2), method = 'ML')
 coeftest(b.412)
-#arima.test(b.412, 12)
+arima.test(b.412, 12)
 ```
 
 
@@ -640,7 +640,7 @@ coeftest(b.412)
 ```{r}
 b.414 <- arima(bitcoin.log, order=c(4,1,4), method = 'ML')
 coeftest(b.414)
-#arima.test(b.414, 13)
+arima.test(b.414, 13)
 ```
 
 NANs produced
@@ -650,7 +650,7 @@ NANs produced
 ```{r}
 b.416 <- arima(bitcoin.log, order=c(4,1,6), method = 'ML')
 coeftest(b.416)
-#arima.test(b.416, 14)
+arima.test(b.416, 14)
 ```
 
 NANs produced
@@ -660,7 +660,7 @@ NANs produced
 ```{r}
 b.515 <- arima(bitcoin.log, order=c(5,1,5), method = 'ML')
 coeftest(b.515)
-#arima.test(b.515, 15)
+arima.test(b.515, 15)
 ```
 
 NANs produced
@@ -672,7 +672,7 @@ Testing the hypothesised ARIMA(5,1,6) model below.
 ```{r}
 b.516 <- arima(bitcoin.log, order=c(5,1,6), method = 'ML')
 coeftest(b.516)
-#arima.test(b.516, 16)
+arima.test(b.516, 16)
 ```
 The proposed model has mostly signficant lags except AR4. -
 
@@ -696,7 +696,7 @@ This is a viable candidate.
 ```{r}
 b.610 <- arima(bitcoin.log, order=c(6,1,0), method = 'ML')
 coeftest(b.610)
-#arima.test(b.610, 17)
+arima.test(b.610, 17)
 ```
 
 All lags are significant.  
@@ -716,7 +716,7 @@ Because the model fails to capture the autocorrelation of the series, this model
 ```{r}
 b.612 <- arima(bitcoin.log, order=c(6,1,2), method = 'ML')
 coeftest(b.612)
-#arima.test(b.612, 18)
+arima.test(b.612, 18)
 ```
 
 Only the AR5, AR6 and MA1 lags are signficant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
@@ -726,7 +726,7 @@ Only the AR5, AR6 and MA1 lags are signficant. Autocorrelation appears to have b
 ```{r}
 b.614 <- arima(bitcoin.log, order=c(6,1,4), method = 'ML')
 coeftest(b.614)
-#arima.test(b.614, 19)
+arima.test(b.614, 19)
 ```
 
 Only the AR3, MA1 and MA4 lags are significant. Autocorrelation appears to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
@@ -737,7 +737,7 @@ Only the AR3, MA1 and MA4 lags are significant. Autocorrelation appears to have 
 ```{r}
 b.615 <- arima(bitcoin.log, order=c(6,1,5), method = 'ML')
 coeftest(b.615)
-#arima.test(b.615, 20)
+arima.test(b.615, 20)
 ```
 
 Most lags are signficant except AR5, AR6 and MA1. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals.
@@ -747,7 +747,7 @@ Most lags are signficant except AR5, AR6 and MA1. Autocorrelation appear to have
 ```{r}
 b.616 <- arima(bitcoin.log, order=c(6,1,6), method = 'ML')
 coeftest(b.616)
-#arima.test(b.616, 21)
+arima.test(b.616, 21)
 ```
 
 NANs produced
@@ -757,7 +757,7 @@ NANs produced
 ```{r}
 b.6111 <- arima(bitcoin.log, order=c(6,1,11), method = 'ML')
 coeftest(b.6111)
-#arima.test(b.6111, 22)
+arima.test(b.6111, 22)
 ```
 
 Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
@@ -767,7 +767,7 @@ Over half the coefficients are insignficant. Autocorrelation appear to have been
 ```{r}
 b.11111 <- arima(bitcoin.log, order=c(11,1,11), method = 'ML')
 coeftest(b.11111)
-#arima.test(b.11111, 23)
+arima.test(b.11111, 23)
 ```
 
 Over half the coefficients are insignficant. Autocorrelation appear to have been removed. Thick tails on QQ Plot and volatility clustering in plot of residuals. 
