@@ -20,19 +20,19 @@ output:
 
 # Introduction
 
-Bitcoin is a form of electronic cash and is popular for being the first cryptocurrency. It was invented in 2009 and is a decentralized digital currency with transactions recorded by ‘miners’, a process completed through the use of computer processing power. Bitcoin, and cryptocurrency as a whole, is criticised for many factors, its high volatility being one of them. Bitcoin experiences many cycles bubbles and busts, and to be able forecast these trends could help in making decisions before investing or selling bitcoin. Taking into account the daily closing price of bitcoin from the 27th of April 2013 to the 24th of February 2019, sourced from coinmarketcap.com we can build a timeseries model and forecast the next 10 days with high accuracy.
+Bitcoin is a form of electronic cash and is popular for being the first cryptocurrency. It was invented in 2009 and is a decentralized digital currency with transactions recorded by ‘miners’, a process completed through the use of computer processing power (Calvery, 2013). Bitcoin, and cryptocurrency as a whole, is criticised for many factors, its high volatility being one of them. Bitcoin experiences many cycles bubbles and busts, and to be able forecast these trends could help in making decisions before investing or selling bitcoin. Taking into account the daily closing price of bitcoin from the 27th of April 2013 to the 24th of February 2019, sourced from coinmarketcap.com we can build a timeseries model and forecast the next 10 days with high accuracy.
 
 ## Outline of Project
 
-The aim of this project is to use the statistical analysis methods covered in MATH1318: Time Series Analysis in order to fit an appropriate model to the Bitcoin time series which will allow us to create a 10 day forecast. The true values of the next 10 days in the series are known, so the predictive ability of the model will be assessed using the Mean Absolute Scaled Error (MASE) method. 
+The aim of this project is to use the statistical analysis methods covered in MATH1318: Time Series Analysis in order to fit an appropriate model to the Bitcoin time series which will allow us to predict a 10 day forecast. The true values of the next 10 days in the series are known, so the predictive ability of the model will be assessed using the Mean Absolute Scaled Error (MASE) method as will the MASE of the fitted model. 
 
-Firstly, we will import and preprocess the data so it can be converted into a time series object. We will then plot the series and provide an initial inspection of the behaviour of the series. We will also calculate the autocorrelation of the series and examine the Autocorrelation Function (ACF), Partial Autocorrelation Function (PACF) and first lag scatter plot. From this initial inspection, we will highlight key aspects of the series and explain how these will guide our modelling strategy. 
+Firstly, we will import and preprocess the data so it can be converted into a time series object. We will then plot the series and provide an initial inspection of the trend, seasonality, intervention points, change in variance and behaviour of the series. We will also calculate the autocorrelation of the series and examine the Autocorrelation Function (ACF), Partial Autocorrelation Function (PACF) and first lag scatter plot. From this initial inspection, we will highlight key aspects of the series and explain how these will guide our modelling strategy. 
 
-In the next section, we will apply an appropriate transformation and take the first difference of the series in order to achieve stationarity. We will then model the mean trend of the series through ARIMA modelling, using the ACF, PACF, Extended Autocorrelation Function (EACF) and the Bayesian Information Critereon (BIC) Table to identfy potential orders. The potential models will be fitted and subjected to statistical testing, whereupon the significance of the coefficients and the behaviour of the model residuals will be assessed. Additionaly, we will use Akaike Information Crieteron (AIC) and BIC scores in order to rank the potential. These methods will be used to select and justify the most appropriate chocie. 
+In the next section, we noticed the presence of a trend in the series. This indicates the application of Box Cox transformation and the implementation of differencing of the series to achieve stationarity. The level of differencing will provide the d value of the ARIMA model. We will then model the mean trend of the series through ARIMA modelling, using the ACF, PACF, Extended Autocorrelation Function (EACF) and the Bayesian Information Critereon (BIC) Table to identfy potential orders of p and q variables. The potential models will be fitted and subjected to statistical testing, whereupon the significance of the coefficients and the behaviour and heteroskedasticity of the model residuals will be assessed. Additionaly, we will use Akaike Information Crieteron (AIC) and BIC scores in order to rank the given models. These methods will be used to filter out irrelevant models and possible select the best performing models. 
 
-We suspect this series has changing variance. This assumption will be tested and verified using statistical tests and a GARCH component will be added to our model. The GARCH orders will be estimated using the transformed residuals of the ARIMA series. The potential GARCH models will be fitted and the residuals will be inspected. Again, we will use AIC to rank the potential models and select the GARCH model with the lowest score. 
+We suspect this series has changing variance. This assumption will be tested and verified using statistical tests and upon validation, a GARCH component will be added to our model. The GARCH orders will be estimated using the transformed residuals of the ARIMA series. The potential GARCH models will be fitted and the residuals will be inspected. Again, we will use AIC to rank the potential models and select the GARCH model with the lowest score. 
 
-Once the ARIMA and GARCH components of our final model have been fitted to the data, we will estimate the 10 day forecast of Bitcoin cloising prices. Because we will have transformed and differenced the time series, our forecast will be reverse-transformed and fitted to the original series. We will then assess the accuracy of our prediction using the MASE method.
+Once the ARIMA and GARCH components of our final model have been fitted to the data, we will estimate the 10 day forecast of Bitcoin closing prices. Because we will have transformed and differenced the time series, our forecast will be reverse-transformed and inverse-differenced back to the scale of the original series. We will then assess the accuracy of our prediction using the MASE method.
 
 \newpage
 
@@ -223,7 +223,8 @@ Upon inspection of the data, we noticed two things that needed to be addressed. 
 ## Import Data
 ```{r}
 # setwd("C:/Users/marga/OneDrive/Documents/Uni/Time Series Analysis/Final Project") # Meg's WD
-setwd("~/STUDYING/COURSES/MASTERS-ANALYTICS/03-SEMESTER-01-2019/TIME-SERIES-ANALYSIS/MATH1318_Final_Project") # Elleni's
+# setwd("~/STUDYING/COURSES/MASTERS-ANALYTICS/03-SEMESTER-01-2019/TIME-SERIES-ANALYSIS/MATH1318_Final_Project") # Elleni's
+setwd("C:/Users/samgh/Desktop/Masters of Statistics and Operations Research/Year 2/Sem 1/Time Series Analysis/Assignments/Final Assignment") # Sam's
 bitcoin <- read.csv("Bitcoin_Historical_Price.csv", header = TRUE, stringsAsFactors = FALSE)
 ```
 
@@ -258,9 +259,9 @@ plot(bitcoin.ts, ylab = "Daily Closing Price of Bitcoin (USD)", main = "Figure 1
 
 2. Seasonality: There are no seasonally repeating patterns evident in the data. If we miss any seasonal behaviour in the initial inspection, it will be apparently in the ACF and PACF plots. 
 
-3. Changing Variance: Changing variance is very clear. Initially, variance in the data is small until 2017 and then it dramatically increases. It appears to become small again at the very end of the series. We know financial data is sensitive to shocks so this is expected. Research was conducted to identify the potential causes of these shocks, which included tightening regulation on Bitcoin trading. 
+3. Changing Variance: Changing variance is very clear. Initially, variance in the closing price value is small with little variance until early 2017 and then it dramatically increases in volitlity. It appears to decrease in variation again at the very end of the series. We know financial data is sensitive to shocks so this is expected (Petrica et al, 2016). Research was conducted to identify the potential causes of these shocks, which included tightening regulation on Bitcoin trading (Chohan, 2017). 
 
-4. Intervention Point: Through the research conducted on the exogenous events impacting the series, we identified a number of potential intervention points, such as ______ . However, we deemed that none of the shocks were so great as to completely disrupt the behaviour of the series. **<NEED TO FINISH THE UNDERLINED BIT...SAM DID YOU WANT TO PUT IN SOME OF YOUR INSIDER INFORMATION ABOUT WHAT THE POSSIBLE INTERVENTION POINTS LINED UP WITH IN THE MEDIA/ YOUR RESEARCH >**
+4. Intervention Point: Through the research conducted on the exogenous events impacting the series, we identified a number of potential intervention points, such as the peak and sudden crash in December 2017 and 'big players' banning bitcoin advertisements such as Facebook and Google (Bambrough, 2018) soon after the crash. However, we deemed that none of the shocks were so great as to completely disrupt the behaviour of the series. 
 
 5. Autocorrelation Behaviour: Both autocorrelation and moving average behaviour seem apparent. For autocorrelation behaviour, we can see instances where consecutive observations closely follow each other. For moving average, there are also instances where the data seems to sharply fluctuate. Overall, the behaviour is difficult to see because of the changing variance. 
 
@@ -312,7 +313,7 @@ The ACF in Figure 3a shows a large number of highly significantly lags, exhibiti
 
 # 2. Transformation and Differencing
 
-Before fitting the model, any non-stationarity in the series must be removed. To do this, we will use the Box-Cox method to first transform the data and attempt to stablise the variance. We will then test for stationarity using the Augmented Dickey-Fuller (ADF) Unit-Root Test. Once we have confirmed non-stationarity in the transformed data, we will take the difference of the time series and repeat the ADF test until non-stationarity is achieved. The transformed and differenced data is what we will use in our ARIMA modelling, with the d order equivalent to the number of differences required to achieve stationarity. 
+Before fitting the model, any non-stationarity in the series must be reduced. To do this, we will use the Box-Cox method to first transform the data and attempt to stablise the variance. We will then test for stationarity using the Augmented Dickey-Fuller (ADF) Unit-Root Test. Once we have confirmed non-stationarity in the transformed data, we will take the difference of the time series and repeat the ADF test until non-stationarity is achieved. The transformed and differenced data is what we will use in our ARIMA modelling, with the d order equivalent to the number of differences required to achieve stationarity. 
 
 ## Apply a Box-Cox Transformation 
 
@@ -475,11 +476,10 @@ The methodology for chosing the best ARIMA model will firstly involve fitting ea
 
 **ARIMA(2,1,2)**
 
-In our first ARIMA test we explore the candidate ARIMA(2,1,2) model. In the coefficient test we can see that we have two coefficients that are statistically insignificant (with a p-value greater that the significance level of 0.05) and two values with NAs in the Standard Error and p-values of the coefficients.Insignificant p-values allude to the fact that this candidate model does not capture the series well.  **<Insert what NAs mean>**
+In our first ARIMA test we explore the candidate ARIMA(2,1,2) model. In the coefficient test we can see that we have two coefficients that are statistically insignificant (with a p-value greater that the significance level of 0.05) and two values with NAs in the Standard Error and p-values of the coefficients.Insignificant p-values allude to the fact that this candidate model does not capture the series well.  The NA values are caused by the square root of negative values found in the hessian matrix which is passed when fitting an ARIMA model.
 
-In the ACF plot of Standardised Residuals (figure 9D) we still have significant ACF lags, corresponding to some autocorrelation left in the residuals. In the Ljung Box test (titled p-values for Ljung Box statistic) we have a mix of  statistically signficant and statistically insignificant lags. 
+In the ACF plot of Standardised Residuals (figure 9D) we still have significant ACF lags, corresponding to some autocorrelation left in the residuals. In the Ljung Box test (titled p-values for Ljung Box statistic) we have a mix of  statistically signficant and statistically insignificant lags. This deems the model as not valid.
 
-**<IS IT VIABLE OR NOT??>**
 
 ```{r}
 b.212 <- arima(bitcoin.log, order=c(2,1,2), method = 'ML')
@@ -493,9 +493,7 @@ arima.test(b.212, 9)
 
 The next canidate model, ARIMA(2,1,2), is tested below. In the coefficient test we can see only two statistically significant MA coefficients ($\theta_2$ and $\theta_4$) with the rest of the coefficient estimates being statistically insignificant. 
 
-In the ACF plot of Standardised Residuals (figure 10D) we again still have significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having mainly statistically insignificant lags.
-
-**<IS IT VIABLE OR NOT??>**
+In the ACF plot of Standardised Residuals (figure 10D) we again still have significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having mainly statistically insignificant lags. But due to the significant lags at 11 onward, this model is also not viable.
 
 ```{r}
 b.214 <- arima(bitcoin.log, order=c(2,1,4), method = 'ML')
@@ -507,13 +505,11 @@ arima.test(b.214, 10)
 
 **ARIMA(2,1,6)**
 
-With the candidate model ARIMA(2,1,2) half the coefficients are statistically significant ($\phi_1$, $\phi_2$, $\theta_1$ and $\theta_2$).
+With the candidate model ARIMA(2,1,2) half the coefficients are statistically significant ($\phi_1$, $\phi_2$, $\theta_1$ and $\theta_2$). This could be a symptom of overfitting, which will be investigated if this model proves to be significant.
 
 In the ACF plot of Standardised Residuals (figure 11D) we only have late significant ACF lags.
 
-The Ljung-Box test (titled p-values for Ljung Box statistic) we have no lags that fall below the significant level, meaning that there is no significant autocorrelation left in the lags of the residuals of this candidate model.
-
-**<IS IT VIABLE OR NOT??>**
+The Ljung-Box test (titled p-values for Ljung Box statistic) we have no lags that fall below the significant level, meaning that there is no significant autocorrelation left in the lags of the residuals of this candidate model. We then deem ARIMA(2,1,6) as a candidate model.
 
 ```{r}
 b.216 <- arima(bitcoin.log, order=c(2,1,6), method = 'ML')
@@ -525,9 +521,7 @@ arima.test(b.216, 11)
 
 **ARIMA(4,1,2)**
 
-In the candidate model ARIMA(4,1,2) we have only one statistically significant coefficient ($\phi_4$). We can see late lags in the ACF plot of residuals (plot 12D) but we also see that the Ljung-Box test on the candidate model's residuals show some lags that are statistically significant. We interpret this to mean that there is some autocorrelation left in these lags.
-
-**<DO WE MAKE THE CALL THAT THIS THEN ISN'T A VIABLE MODEL AS AUTOCORRELATION LEFT AND ONLY ONE STATISTICALLY SIGN COEFF?>**
+In the candidate model ARIMA(4,1,2) we have only one statistically significant coefficient ($\phi_4$). We can see late lags in the ACF plot of residuals (plot 12D) but we also see that the Ljung-Box test on the candidate model's residuals show some lags that are statistically significant. We interpret this to mean that there is some autocorrelation left in these lags and thus reject the validity of this model.
 
 ```{r}
 b.412 <- arima(bitcoin.log, order=c(4,1,2), method = 'ML')
@@ -559,9 +553,9 @@ arima.test(b.414, 13)
 
 In the candidate model ARIMA(4,1,6) we only three statistically significant coefficients ($\phi_4$, $\theta_4$ and $\theta_6$)
 
-In the ACF plot of Standardised Residuals (figure 14D) we only have late significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having statistically significant lags.
+In the ACF plot of Standardised Residuals (figure 14D) we only have late significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having statistically significant lags. 
 
-**<IS IT VIABLE OR NOT??>**
+The standardised residuals display change in variance over the time series, this can be addressed using a GARCH component if the model shows no significant lags in the Ljung Box test. As displayed below, there are indeed no significant lags, deeming ARIMA(4,1,6) a candidate model.
 
 ```{r}
 b.416 <- arima(bitcoin.log, order=c(4,1,6), method = 'ML')
@@ -574,6 +568,8 @@ arima.test(b.416, 14)
 In the next candidate model ARIMA(5,1,5) we have a mix of results in the coefficient test. Two coefficients ($\phi_4$ and $\theta_4$) produce NA values in the test for statistical significance. One value ($\theta_3$) is statistically insignificant, leaving the rest of the coefficients statistically significant. 
 
 In the ACF plot of Standardised Residuals (figure 15D) we yet again only have late significant ACF lags with the Ljung Box test (titled p-values for Ljung Box statistic) having statistically significant lags.
+
+Again, change in variance is present in the standardised residual plot, deeming the possible use of a GARCH component. The Ljung Box test showsno significant lags, deeming ARIMA (5,1,5) as a candidate model.
 
 ```{r}
 b.515 <- arima(bitcoin.log, order=c(5,1,5), method = 'ML')
@@ -602,15 +598,12 @@ arima.test(b.516, 16)
 
 **ARIMA(6,1,0)**
 
-Testing the candidate model ARIMA(6,1,0) we find that all coefficients are statistically insignificant, except for the coefficients ($\phi_5$ and $\phi_6$)
+Testing the candidate model ARIMA(6,1,0) we find that all coefficients are statistically insignificant, except for the coefficients ($\phi_5$ and $\phi_6$). This may indicate not overfitting, but simply that most coefficients of lower orders are not useful for capturing all stochastic processes of the time series. 
 
 Histogram of residuals (Figure 17B) shows they are symmetrically distributed but the shape of the bell curve is very extreme. The QQ Plot (Figure 17C) shows very thick tails indicating changing variance which will need to be handled.  Shapiro-Wilk result is a very small p-value, indicating the rejection of the null hypothesis of normally distributed residuals. 
 
-The ACF of Residuals (Figure 17D) indicates there is autocorrelation left in the residuals. However the p-value of the Ljung-Box test supports the argument that the lags are not statistically significant.
+The ACF of Residuals (Figure 17D) indicates there is autocorrelation left in the residuals. However the p-value of the Ljung-Box test supports the argument that the lags are not statistically significant. This allows us to deem ARIMA (6,1,0) as a candidate model.
 
-Because the model fails to capture the autocorrelation of the series, this model is rejected. 
-
-**<IS THIS STILL TRUE?? LAGS ARE LATE AND LJUNG BOX TEST NOW ISN'T SIGNIFICANT >** **<IS IT VIABLE OR NOT??>**
 
 ```{r}
 b.610 <- arima(bitcoin.log, order=c(6,1,0), method = 'ML')
@@ -620,11 +613,10 @@ arima.test(b.610, 17)
 
 **ARIMA(6,1,2)**
 
-When testing the ARIMA(6,1,2) candidate model we can see insignificant coefficients on all estimates from $\phi_3$ t0 $\phi_6$.
+When testing the ARIMA(6,1,2) candidate model we can see insignificant coefficients on all estimates from $\phi_3$ t0 $\phi_6$. The higher orders of $\phi$ may be an indication of overfitting. 
 
-In the ACF plot of the Residuals (Figure 18D) we can see late autocorrelated lags. Thick tails appear in the QQ Plot (Figure 18C) and with volatility clustering in the plot of residuals (Figure 18A). The Ljung-Box test shows that all lags are statistically insignificant.
+In the ACF plot of the Residuals (Figure 18D) we can see late autocorrelated lags. Thick tails appear in the QQ Plot (Figure 18C) and with volatility clustering in the plot of residuals (Figure 18A). The Ljung-Box test shows that all lags are statistically insignificant. This deems ARIMA(6,1,2) as a valid candidate model.
 
-**<IS IT VIABLE OR NOT??>**
 
 ```{r}
 b.612 <- arima(bitcoin.log, order=c(6,1,2), method = 'ML')
@@ -634,11 +626,10 @@ arima.test(b.612, 18)
 
 **ARIMA(6,1,4)**
 
-When testing the ARIMA(6,1,4) candidate model we can see insignificant coefficients in two estimates ($\phi_5$ and $\phi_6$) with an equal splot of statistically significant coefficients and coefficients with NA p-values over the rest.
+When testing the ARIMA(6,1,4) candidate model we can see insignificant coefficients in two estimates ($\phi_5$ and $\phi_6$) with $\phi_1$ and $\phi_4$ as statistically significant coefficients and coefficients with NA p-values over the rest. This implies the infinite approach to a given value or the square root of a negative value and possible overfitting with insignificant higher order values.
 
-In the ACF plot of the Residuals (Figure 19D) we can see late autocorrelated lags, with yet again thick tails appearing in the QQ Plot (Figure 19C) and volatility clustering in the plot of residuals (Figure 19A). The Ljung-Box test shows that all lags are statistically insignificant.
+In the ACF plot of the Residuals (Figure 19D) we can see late autocorrelated lags, with yet again thick tails appearing in the QQ Plot (Figure 19C) and volatility clustering in the plot of residuals (Figure 19A). The Ljung-Box test shows that all lags are statistically insignificant. This allows us to deem ARIMA(6,1,4) as a valid candidate model.
 
-**<IS IT VIABLE OR NOT??>**
 
 ```{r}
 b.614 <- arima(bitcoin.log, order=c(6,1,4), method = 'ML')
@@ -653,9 +644,7 @@ In the ARIMA(6,1,5) candidate model, most coefficient estimates are signficant e
 
 In the ACF plot of the Residuals (Figure 20D) we can see only one autocorrelated lag and yet again thick tails appear in the QQ Plot (Figure 20C) with volatility clustering in the plot of residuals (Figure 20A). 
 
-The Ljung-Box test shows that all lags are statistically insignificant, meaning the lags hold no statistically significant autocorrelaton.
-
-**<IS IT VIABLE OR NOT??>**
+The Ljung-Box test shows that all lags are statistically insignificant, meaning the lags hold no statistically significant autocorrelaton. This allows us to deem ARIMA(6,1,5) as a valid candidate model.
 
 ```{r}
 b.615 <- arima(bitcoin.log, order=c(6,1,5), method = 'ML')
@@ -665,13 +654,13 @@ arima.test(b.615, 20)
 
 **ARIMA(6,1,6)**
 
-In the ARIMA(6,1,6) candidate model, all coefficient estimates return a NA p-value **<WHAT DOES THIS MEAN??>**
+In the ARIMA(6,1,6) candidate model, all coefficient estimates return a NA p-value. This indicates that upon the passing of the hessian matrix within the ARIMA model fit, negative values were involved and thus we may consider rejecting this model. We shall investigate further the residuals and lags to determine the validity of this model.
 
 In the ACF plot of the Residuals (Figure 21D) we can see only one, maybe two autocorrelated lag and the Ljung-Box test shows that all lags are statistically insignificant, meaning the lags hold no statistically significant autocorrelaton.
 
-Thick tails appear in the QQ Plot (Figure 21C) with volatility clustering in the plot of residuals (Figure 21A). 
+Thick tails appear in the QQ Plot (Figure 21C) with volatility clustering in the plot of residuals (Figure 21A). This aspect not being captured by the model could be handled by a GARCH component, considered a later in the report.
 
-**<IS IT VIABLE OR NOT??>**
+The Ljung Box test shows no significant lags thus we deem ARIMA(6,1,6) as a statistically valid model to consider.
 
 ```{r}
 b.616 <- arima(bitcoin.log, order=c(6,1,6), method = 'ML')
@@ -681,11 +670,13 @@ arima.test(b.616, 21)
 
 **ARIMA(6,1,11)**
 
-In the ARIMA(6,1,11) we have only six statistically significant coefficient estimates, with three coefficients with NA p-values and the rest all statistically insignificant. We have two lags autocorrelated found in the ACF plot of residuals in Figure 22D. The Ljung-Box test shows that all lags are statistically insignificant, meaning the lags hold no statistically significant autocorrelaton.
+In the ARIMA(6,1,11) we have only six statistically significant coefficient estimates, with three coefficients with NA p-values and the rest all statistically insignificant. Although the highest order of $\phi$ is significant, all higher orders of $\theta_7$ onward do not show any statistical significance. This could indicate overfitting.
 
-Thick tails appear in the QQ Plot (Figure 22C) with volatility clustering in the plot of residuals (Figure 22A). 
+We have two lags autocorrelated found in the ACF plot of residuals in Figure 22D. The Ljung-Box test shows that all lags are statistically insignificant, meaning the lags hold no statistically significant autocorrelaton.
 
-**<IS IT VIABLE OR NOT??>**
+Thick tails appear in the QQ Plot (Figure 21C) with volatility clustering in the plot of residuals (Figure 21A). This aspect not being captured by the model could be handled by a GARCH component, considered a later in the report.
+
+The Ljung Box test shows no significant lags thus we deem ARIMA(6,1,11) as a statistically valid model to consider.
 
 
 ```{r}
@@ -696,13 +687,13 @@ arima.test(b.6111, 22)
 
 **ARIMA(11,1,11)**
 
-In the test on ARIMA(11,1,11) we find nine coefficient estimates to be statistically signficant, eight are statistically insignificant and the rest return with a NA for the p-value of the coefficient estimate.
+In the test on ARIMA(11,1,11) we find nine coefficient estimates to be statistically signficant and the rest are statistically insignificant. Given that the highest orders of $\phi$ and $\theta$ are significant, the insignificant variables do not indicate overfitting.
 
 In the ACF plot of the Residuals (Figure 23D) we can see only one late significant lag with the Ljung-Box test showing that all lags are statistically insignificant, meaning the lags actually hold no statistically significant autocorrelaton.
 
-Thick tails appear in the QQ Plot (Figure 23C) with volatility clustering in the plot of residuals (Figure 23A). 
+Thick tails appear in the QQ Plot (Figure 21C) with volatility clustering in the plot of residuals (Figure 21A). This aspect not being captured by the model could be handled by a GARCH component, considered a later in the report.
 
-**<IS IT VIABLE OR NOT??>**
+The Ljung Box test shows no significant lags thus we deem ARIMA(11,1,11) as a statistically valid model to consider.
 
 ```{r}
 b.11111 <- arima(bitcoin.log, order=c(11,1,11), method = 'ML')
@@ -711,12 +702,8 @@ arima.test(b.11111, 23)
 ```
 
 
-**IS THE BELOW STILL TRUE???**
-Based on this analysis, we can narrow down our selection of possible models. The models that successfully removed autocorrelation from the series were {ARIMA(5,1,6), ARIMA(6,1,4), ARIMA(6,1,5), ARIMA(6, 1, 11), ARIMA(11,1,11)}.
+Based on this analysis, we can narrow down our selection of possible models. The models that successfully removed autocorrelation from the series were {ARIMA(2,1,6), ARIMA(4,1,6), ARIMA(5,1,5), ARIMA(5,1,6), ARIMA(6,1,0), ARIMA(6,1,4), ARIMA(6,1,5), ARIMA(6, 1, 11), ARIMA(11,1,11)}.
 
-
-
-**<UP TO HERE>**
 
 ### AIC BIC Ranking
 
@@ -724,27 +711,23 @@ The Akaike Information Criterion (AIC) and Bayesian Information Criterion (BIC) 
 
 ```{r}
 
-sort.score(AIC(b.516, b.612, b.614, b.615, b.6111, b.11111), score = "aic")
+sort.score(AIC(b.216,b.416,b.515,b.516, b.610,b.612, b.614, b.615, b.6111, b.11111), score = "aic")
 # sort.score(AIC(b.516, b.612, b.614, b.615, b.6111, b.11111), score = "bic")
-AIC(b.516, b.612, b.614, b.615, b.6111, b.11111, k = log(28))
+AIC(b.216,b.416,b.515,b.516, b.610,b.612, b.614, b.615, b.6111, b.11111, k = log(28))
 #Note that sort.score function was obtained from the MATH1318 Canvas Shell under Module 7. 
+
+BIC(b.216,b.416,b.515,b.516, b.610,b.612, b.614, b.615, b.6111, b.11111)
 
 #**<OUT OF INTEREST SAKE I HAVE PLACE ALL>**
 # sort.score(AIC(b.212, b.214, b.216, b.412, b.414, b.416, b.515, b.516, b.610, b.612, b.614, b.615, b.616, b.6111, b.11111), score = "aic")
 ```
 
 
-
-
-
 ### Final ARIMA Model Chosen:
 
-ARIMA(5,1,6) has the lowest score for both AIC and BIC. We also found that most of the coefficients generated by MLE for this model were statistically significant. Only AR4 was found to be insignificant, with the next coefficient, AR5, significant, so this is acceptable. Further, the ACF of the standardised residuals indicated the model sufficient captured the autocorrelation of the model, showing no significant lags. The p-value of the Ljung-Box test is greater than 0.05 for every lag, indicating that there is no signficant evidence to reject the null hypothesis that the residuals are uncorrelated. 
+ARIMA(5,1,6) has low scores for both AIC and BIC. We also found that most of the coefficients generated by MLE for this model were statistically significant. Only AR4 was found to be insignificant, with the next coefficient, AR5, significant, so this is acceptable. Further, the ACF of the standardised residuals indicated the model sufficient captured the autocorrelation of the model, showing no significant lags. The p-value of the Ljung-Box test is greater than 0.05 for every lag, indicating that there is no signficant evidence to reject the null hypothesis that the residuals are uncorrelated. 
 
 From the standardised residuals plot, there is still obvious volatility clustering that will need to be examined further.
-
-
-
 
 
 ### Overfitting Testing
@@ -1064,10 +1047,17 @@ Would be that we understand what to expect in regard to the 'sudden outbreaks at
 
 # References
 
-Wikipedia 2019, **Bitcoin**, Wikipedia, viewed 29 May 2019, <https://en.wikipedia.org/wiki/Bitcoin>.
+Statement of Jennifer Shasky Calvery, Director Financial Crimes Enforcement Network United States Department of the Treasury, Nov 18, 2013
 
-??Statement of Jennifer Shasky Calvery, Director
-Financial Crimes Enforcement Network United States Department of the Treasury, Nov 18, 2013
+Bambrough, B 2017, Blow To Bitcoin As Mark Zuckerberg Warns Facebook Payments Are Coming, <https://www.forbes.com/sites/billybambrough/2019/03/07/blow-to-bitcoin-as-mark-zuckerberg-warns-facebook-payments-are-coming/#55eaa8566daa>
+
+Bambrough, B 2018, Google Has Suddenly Scrapped Its Bitcoin Ad Ban -- Here's What That Means, <https://www.forbes.com/sites/billybambrough/2018/09/25/google-is-scraping-its-bitcoin-ban-heres-what-that-will-mean/#28aaa60e5654>
+
+Petrica A C, Stancu S, Tindeche A, 2016, Limitation of ARIMA models in financial and monetary economics, Vol 23, No. 4, Winter, Theoretical and Applied Economics, pp. 19-42
+
+Chohan, U W 2017, Assessing the Differences in Bitcoin & Other Cyptocurrency Legality Across National Jurisdictions, UNSW Business School, pp.1-11
+
+
 
 # Appendix
 
