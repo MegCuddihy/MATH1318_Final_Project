@@ -794,7 +794,7 @@ The null hypothesis of the McLeod-Li test is there is no Autoregressive Conditio
 
 ### ACF and PACF of Nonlinear Transformations
 
-If the residual values are truly independent, then applying nonlinear transformations to the data should not affect the autocorrelation structure of the data. We should still see no signficant lags in the ACF and PACF as is the case for the untransformed residuals. 
+If the residual values are truly independent, then applying nonlinear transformations to the data should not affect the autocorrelation structure of the data. We should still see no signficant lags in the ACF and PACF as is the case for the untransformed residuals (Yaziz et al, 2013). 
 
 ```{r}
 
@@ -812,6 +812,8 @@ Comparing Figures 11a and 11b of the Absolute Values transformed residuals with 
 This is sufficient evidence to conclude there is an ARCH behaviour in the variance of the series. We can estimate a GARCH component using the EACF of the transformed residuals to improve the accuracy of our ARIMA(5,1,6) model.
 
 ## Estimate the Orders of GARCH 
+
+Given the clear indication of changing variance and conditional heteroscedasticity from previous plots of standardised residuals, a GARCH element will be investigated. For finanical data that is volatile as bitcoin, the use of the GARCH extension, as opposed to the ARCH option, on the ARIMA model 'improves the accuracy of forecasting by including all the past squared returns with lesser weights corresponding to more distant volatilities' (Grachev, 2017), thus regarding the changes in volitility in the bitcoin data, this allows us to confidently implement a GARCH component.
 
 ### EACF of Transformed Residuals
 
@@ -1057,7 +1059,9 @@ Petrica A C, Stancu S, Tindeche A, 2016, Limitation of ARIMA models in financial
 
 Chohan, U W 2017, Assessing the Differences in Bitcoin & Other Cyptocurrency Legality Across National Jurisdictions, UNSW Business School, pp.1-11
 
+Yaziz A R, Azizan N A, Zakiria R, Alumad M H, 2013, The performance of hybrid ARIMA-GARCH modeling in forecasting gold price, Faculty of Industrial Sciences and Technology, Universiti Malaysia Pahang, p. 1202-1203
 
+Grachev, O 2017, Application of Time Series Models (ARIMA, GARCH, and ARMA-GARCH) for Stock Market Forecasting, Northern Illinois University  Department of Economics, p.15
 
 # Appendix
 
