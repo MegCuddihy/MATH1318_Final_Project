@@ -297,7 +297,7 @@ abline(0,1, col = "red")
 
 1. As expected, the scatter plot shows there is a clear positive relationship between current time point values and the value of the previous lag.
 
-2. The scatter plot also supports our assumption that there is changing variance in the series. The smaller values of the series are very tightly configured around the 45 degree line, while larger values are more spread. 
+2. The scatter plot also supports our assumption that there is changing variance in the series. The smaller values of the series are very tightly configured around the 45 degree line, while larger values are more spread.The scatterplot displays clusters present in the autocorrelations of the time series, this is a further indication of changing variance.
 
 
 #### Calculate the correlation coefficient between current time point values and their first lag
@@ -339,14 +339,14 @@ Before fitting the model, any non-stationarity in the series must be reduced. To
 
 ## Apply a Box-Cox Transformation 
 
-All values of the series are above 0 so we can directly proceed with a Box-Cox Transformation. First we will identify the optimal transformation parameter lambda.
+Due to the ACF and PACF correlograms demonstrating non-stationarity of the time series data, we will investigate the possible and optimal values of lambda using a Box Cox transformation.
  
 ```{r, fig.asp = 0.4}
 bitcoin.bc <- BoxCox.ar(bitcoin.ts, method = 'yule-walker')
 bitcoin.bc$ci
 ```
 
-The optimal lambda is 0, indicating a log transformation on the bitcoin time series is most appropriate. 
+The optimal lambda is 0, indicating a log transformation on the bitcoin time series is most appropriate. Since all values of the time series exceed 0, no arbitrary scalar value will have to be added to the series for transformation.
 
 ```{r}
 bitcoin.log <- log(bitcoin.ts)
@@ -411,7 +411,7 @@ ar(diff(bitcoin.r)) #Order of lags select = 32
 adfTest(bitcoin.r, lags = 32, type = "nc", title = NULL,description = NULL)
 ```
 
-The p-value of the ADF test when applied to the first difference of the log-transformed series is less than 0.01. This is statistically signficant enough to reject the null hypothesis and conclude that the series has be rendered stationary. 
+The p-value of the ADF test when applied to the first difference of the log-transformed series is less than 0.01. With a p-value less than the given alpha level we then reject the null hypothesis and conclude that the series has be rendered stationary. 
 
 This combination of taking the log-transformation and first difference of the series is also commonly referred to as the returns of the series. The returns indicate the percentage movement of prices for each day. We will proceed with determining the ARIMA orders of the Bitcoin Historical Prices series using the returns.
 
@@ -787,7 +787,7 @@ AIC(b.516, b.517)
 arima.test(b.517, 24)
 ```
 
-Although the models seems to have generated residuals free of autocorrelation, it also generated a higher AIC value than ARIMA(5,1,6). With the added order (MA7) also producing a statistically insignificant estimate, we can safely conclude that there is no compelling evidence that the ARIMA(5,1,7) model performs better that the chosen model ARIMA(5,1,6).
+Although the models seems to have generated residuals free of autocorrelation, it also generated a higher AIC value than ARIMA(5,1,6). With the added order $\theta_7$ also producing a statistically insignificant estimate, we can safely conclude that there is no compelling evidence that the ARIMA(5,1,7) model performs better that the chosen model ARIMA(5,1,6).
 
 
 
@@ -850,6 +850,8 @@ This is sufficient evidence to conclude there is an ARCH behaviour in the varian
 
 Given the clear indication of changing variance and conditional heteroscedasticity from previous plots of standardised residuals, a GARCH element will be investigated. For finanical data that is volatile as bitcoin, the use of the GARCH extension, as opposed to the ARCH option, on the ARIMA model 'improves the accuracy of forecasting by including all the past squared returns with lesser weights corresponding to more distant volatilities' (Grachev, 2017), thus regarding the changes in volitility in the bitcoin data, this allows us to confidently implement a GARCH component.
 
+\newpage
+
 ### EACF of Transformed Residuals
 
 ```{r}
@@ -884,7 +886,7 @@ We will fit both the ARMIA(5,1,6) and the possible GARCH orders to the data. We 
 
 In the possible GARCH(2,2) model we can see only 1 lag in the ACF of standardized residuals (Figure 28C). The QQ Plot (Figure 28B), yet again, presents thick tails.
 
-In the coefficient estimates, 2 coefficients (MA6 and Alpha2) are statistically insignificant.
+In the coefficient estimates, 2 coefficients ($\theta_6$ and $\alpha_2$) are statistically insignificant.
 
 
 ```{r, fig.asp = 0.4}
@@ -900,7 +902,7 @@ arima.garch.residual.test(m.56_22, 28)
 
 In the possible GARCH(3,2) model we can see only 3 lags in the ACF of standardized residuals (Figure 29C). The QQ Plot (Figure 29B), yet again, presents thick tails. 
 
-In the coefficient estimates, 3 coefficients (MA5, Alpha2 and Alpha 3) are statistically insignificant.
+In the coefficient estimates, 3 coefficients ($\theta_5$, $\alpha_2$ and $\alpha_3$) are statistically insignificant.
 
 ```{r, fig.asp = 0.4}
 a.32 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(3, 2)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
@@ -916,7 +918,7 @@ arima.garch.residual.test(m.56_32, 29)
 
 In the possible GARCH(3,3) model we can have only 1 lag in the ACF of standardized residuals (Figure 30C). The QQ Plot (Figure 30B), yet again, presents thick tails. 
 
-In the coefficient estimates, 5 coefficients (MA6, Alpha2, Alpha 3, Beta 1 and Beta 3) are statistically insignificant.
+In the coefficient estimates, 5 coefficients ($theta_6$, $\alpha_2$, $\alpha_3$, $\beta_1$, $\beta_3$) are statistically insignificant.
 
 ```{r, fig.asp = 0.4}
 a.33 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(3, 3)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE), distribution.model = "norm")
@@ -934,7 +936,7 @@ arima.garch.residual.test(m.56_33, 30)
 
 In the possible GARCH(4,4) model we can have only 1 lag in the ACF of standardized residuals (Figure 31C). The QQ Plot (Figure 31B), yet again, presents thick tails. 
 
-In the coefficient estimates, 7 coefficients (MA1, MA6, Alpha 2, Alpha 3, Alpha 4, Beta 2 and Beta 3) are statistically insignificant.
+In the coefficient estimates, 7 coefficients ($\theta_1$, $\theta_6$, $\alpha_2$, $\alpha_3$, $\alpha_4$, $\beta_2$, and $\beta_3$) are statistically insignificant.
 
 ```{r, fig.asp = 0.4}
 a.44 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(4, 4)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
@@ -949,8 +951,7 @@ arima.garch.residual.test(m.56_44, 31)
 In the possible GARCH(5,4) model we can have only 1 lag in the ACF of standardized residuals (Figure 32C). The QQ Plot (Figure 32B), yet again, presents thick tails. 
 
   
-
-In the coefficient estimates, 7 coefficients (MA6, Alpha 2, Alpha 3, Alpha 4, Alpha 5, Beta 2 and Beta 3) are statistically insignificant.
+In the coefficient estimates, 7 coefficients ($\theta_6$, $\alpha_2$, $\alpha_3$, $\alpha_4$, $\alpha_5$, $\beta_2$, and $\beta_3$) are statistically insignificant.
 
 ```{r, fig.asp = 0.4}
 a.54 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5, 4)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
@@ -964,7 +965,7 @@ arima.garch.residual.test(m.56_54, 32)
 
 In the possible GARCH(5,5) model we can have only 1 lag in the ACF of standardized residuals (Figure 35C). In Figure 35B the QQ Plot, yet again, presents thick tails. 
 
-In the coefficient estimates, 6 coefficients (MA6, Alpha 4, Beta 1, Beta 2, Beta 3 and Beta 4) are statistically insignificant.
+In the coefficient estimates, 6 coefficients ($\theta_6$, $\alpha_4$, $\beta_1$, $\beta_2$, $\beta_3$, and $\beta_4$) are statistically insignificant.
 
 ```{r, fig.asp = 0.4}
 a.55 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(5, 5)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
@@ -978,7 +979,7 @@ arima.garch.residual.test(m.56_55, 33)
 
 In the possible GARCH(6,5) model we can have only 2 lags in the ACF of standardized residuals (Figure 34C). In Figure 34B the QQ Plot, yet again, presents thick tails. 
 
-In the coefficient estimates, 13 coefficients (AR1, AR4, MA1, MA4, MA6, Alpha 2, Alpha 4, Alpha 5, Alpha 6, Beta 1, Beta 3, Beta 4 and Beta 5) are statistically insignificant.
+In the coefficient estimates, 13 coefficients ($\phi_1$, $\phi_4$, $\theta_1$, $\theta_4$, $\theta_6$, $\alpha_2$, $\alpha_4$, $\alpha_5$, $\alpha_6$, $\beta_1$, $\beta_3$, $\beta_4$, and $\beta_5$) are statistically insignificant.
 
 ```{r, fig.asp = 0.4}
 a.65 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(6, 5)),  mean.model = list(armaOrder = c(5, 6), include.mean = FALSE),  distribution.model = "norm")
@@ -1062,7 +1063,7 @@ mase_results[1,] <- c("Over Fitted Values",MASE(bitcoin.ts,fitted.values.invdiff
 
 **MASE over the forecasts**
 
-Capturing the forecasted values, we again inverse the first difference (using the log of the LAST Bitcoin value in the xi parameter). After this, we yet again capture the exponent of these values. We run these values with the supplied real values for the forecast period to get a MASE score of 1.26147688.
+Capturing the forecasted values, we again inverse the first difference (using the log of the last Bitcoin value in the xi parameter). After this, we yet again capture the exponent of these values. We run these values with the supplied real values for the forecast period to get a MASE score of 1.26147688.
 
 ```{r warning=FALSE}
 forc <- ugarchforecast(m.fit, n.ahead = 10 ,data = diff(log(bitcoin.ts)))
@@ -1088,6 +1089,7 @@ The plot of the inversed differenced and untransformed forecast is plotted below
 plot.reverse.forecast(bitcoin.ts, forc, n.ahead=10, title="Bitcoin time series", zoomed.date = 2018.8, fig_num = 36)
 ```
 
+\newpage
 
 # 7. MASE
 
